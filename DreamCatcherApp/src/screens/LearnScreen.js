@@ -2,18 +2,18 @@ import React from 'react';
 import { View, SafeAreaView, StatusBar, Text, StyleSheet } from 'react-native';
 import { COLORS } from '../theme/theme';
 
-const JournalScreen = (props) => {
+const LearnScreen = (props) => {
     return (
         <>
             <StatusBar barStyle="dark-content" />
             <SafeAreaView style={styles.screenContainer}>
-                <Text style={styles.title}>Journal</Text>
+                <Text style={styles.title}>Learn</Text>
             </SafeAreaView>
         </>
     );
 };
 
-export default JournalScreen;
+export default LearnScreen;
 
 const styles = StyleSheet.create({
     screenContainer: {
