@@ -28,12 +28,12 @@ const BleManagerModule = NativeModules.BleManager;
 const bleManagerEmitter = new NativeEventEmitter(BleManagerModule);
 const SECONDS_TO_SCAN_FOR = 1;
 // the only uuids we are interested in
-const SERVICE_UUIDS: string[] = ['dff3db14-65be-4e80-9852-0bbff6037651'];
+const SERVICE_UUIDS: string[] = ['7504e3b0-fd7a-4b56-b74d-c6e7eeed3f19'];
 //const SERVICE_UUIDS: string[] = [];
 const ALLOW_DUPLICATES = false;
 
 const DCScreen = () => {
-  const [isPopupVisible, setIsPopupVisible] = useState(false);
+  const [isConnectPopupVisible, setIsConnectPopupVisible] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [connectedPeripherals, setConnectedPeripherals] = useState(
     new Map<Peripheral['id'], Peripheral>(),
@@ -42,7 +42,6 @@ const DCScreen = () => {
     new Map<Peripheral['id'], Peripheral>(),
   );
   const [peripheralReadData, setPeripheralReadData] = useState('No Data Yet');
-  const [peripheralWriteData, setPeripheralWriteData] = useState('hello there');
 
   const startScan = () => {
     if (!isScanning) {
@@ -291,8 +290,8 @@ const DCScreen = () => {
         var peripheral = connectedPeripherals[i];
         // Now you are connected to the peripheral, and you have its services and characteristics.
         // You can read a characteristic like this:
-        let service = 'dff3db14-65be-4e80-9852-0bbff6037651'; // replace with your service UUID
-        let characteristic = '80eb899b-b325-4120-b604-df06ec01af12'; // replace with your characteristic UUID
+        let service = '7504e3b0-fd7a-4b56-b74d-c6e7eeed3f19'; // replace with your service UUID
+        let characteristic = '8b38e5b5-2b9a-4954-9281-fcab195b0912'; // replace with your characteristic UUID
         BleManager.write(
           peripheral.id,
           service,
@@ -300,7 +299,7 @@ const DCScreen = () => {
           asciiArray,
         )
           .then(() => {
-            console.log("Wrote " + peripheralWriteData + " to characteristic " + characteristic);
+            console.log("Wrote " + writeData + " to characteristic " + characteristic);
           })
           .catch(error => {
             console.error(
@@ -433,15 +432,15 @@ const DCScreen = () => {
   const ConnectPopUp = () => {
     return (
       <Modal
-      visible={isPopupVisible}
+      visible={isConnectPopupVisible}
       animationType='fade'
       transparent={true}
-      onRequestClose={() => setIsPopupVisible(false)}
+      onRequestClose={() => setIsConnectPopupVisible(false)}
       >
       <View style={popupStyles.popupOverlay}>
         <View style={popupStyles.popup}>
         <View style={popupStyles.popupHeader}>
-          <TouchableOpacity onPress={() => setIsPopupVisible(false)}>
+          <TouchableOpacity onPress={() => setIsConnectPopupVisible(false)}>
           <Text style={popupStyles.closeButton}>x</Text>
           </TouchableOpacity>
 
@@ -480,7 +479,7 @@ const DCScreen = () => {
                 <Text style={styles.title}>Dream Catcher</Text>
 
                 <View style={styles.mainContainer}>
-                  <TouchableOpacity onPress={() => setIsPopupVisible(true)} 
+                  <TouchableOpacity onPress={() => setIsConnectPopupVisible(true)} 
                   style={styles.scanButton}>
                     {Array.from(connectedPeripherals.values()).length === 0 ? 
                     <Text style={styles.scanButtonText}>
@@ -495,13 +494,20 @@ const DCScreen = () => {
                   style={styles.maskImage} />
 
                   <View style={styles.onOffContainer}>
-                  <TouchableOpacity onPress={() => writePeripheral('off')} style={styles.scanButton}>
+                  <TouchableOpacity onPress={() => writePeripheral('light: off')} style={styles.scanButton}>
                     <Text style={styles.scanButtonText}>
                       Turn Off LED</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity onPress={() => writePeripheral('on')} style={styles.scanButton}>
+                  <TouchableOpacity onPress={() => writePeripheral('light: on')} style={styles.scanButton}>
                     <Text style={styles.scanButtonText}>
                       Turn On LED</Text>
+                  </TouchableOpacity>
+                  </View>
+
+                  <View style={styles.onOffContainer}>
+                  <TouchableOpacity onPress={() => writePeripheral('trick: yes')} style={styles.scanButton}>
+                    <Text style={styles.scanButtonText}>
+                      Do a Trick</Text>
                   </TouchableOpacity>
                   </View>
                   
@@ -517,7 +523,7 @@ export default DCScreen;
 const boxShadow = {
     shadowColor: '#000',
     shadowOffset: {
-      width: 0,
+      width: 2,
       height: 2,
     },
     shadowOpacity: 0.25,
@@ -558,8 +564,8 @@ const styles = StyleSheet.create({
     },
     onOffContainer: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
-        margin: 20,
+        justifyContent: 'space-evenly',
+        margin: 10,
     },
     peripheralName: {
         fontSize: 16,
