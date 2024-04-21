@@ -5,7 +5,7 @@ import { COLORS } from '../theme/theme';
 const ProfileScreen = (props) => {
     return (
         <>
-            <StatusBar barStyle="dark-content" />
+            <StatusBar barStyle="default" />
             <SafeAreaView style={styles.screenContainer}>
                 <Text style={styles.title}>Profile</Text>
             </SafeAreaView>

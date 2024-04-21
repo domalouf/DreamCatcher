@@ -5,7 +5,7 @@ import { COLORS } from '../theme/theme';
 const JournalScreen = (props) => {
     return (
         <>
-            <StatusBar barStyle="dark-content" />
+            <StatusBar barStyle="default" />
             <SafeAreaView style={styles.screenContainer}>
                 <Text style={styles.title}>Journal</Text>
             </SafeAreaView>

@@ -2,15 +2,16 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import {createNativeStackNavigator} from '@react-navigation/native-stack';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import Icon from 'react-native-vector-icons/FontAwesome';
 import { BlurView } from '@react-native-community/blur';
-import {COLORS} from './src/theme/theme';
+import { COLORS } from './src/theme/theme';
 
 import JournalScreen from './src/screens/JournalScreen';
 import DCScreen from './src/screens/DCScreen';
 import LearnScreen from './src/screens/LearnScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
+import SettingsScreen from './src/screens/SettingsScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -25,29 +26,29 @@ function BottomNavBarTabs() {
         headerShown: false,
         tabBarStyle: styles.tabBarStyle,
         tabBarBackground: () => (
-          <BlurView overlayColor='transparent' blurAmount={5}
-          style={styles.BlurViewStyle} />
+          <BlurView overlayColor='transparent' blurAmount={1}
+            style={styles.BlurViewStyle} />
         ),
       }}>
-      <Tab.Screen
-        name="Journal"
-        component={JournalStack}
-        options={{
-          tabBarShowLabel: false,
-          tabBarLabel: 'Home',
-          tabBarIcon: ({color, size}) => (
-            <Icon name="book" size={size} color={color} />
-          ),
-        }}
-      />
       <Tab.Screen
         name="DC"
         component={DCStack}
         options={{
           tabBarShowLabel: false,
           tabBarLabel: 'DC',
-          tabBarIcon: ({color, size}) => (
+          tabBarIcon: ({ color, size }) => (
             <Icon name="leaf" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Journal"
+        component={JournalStack}
+        options={{
+          tabBarShowLabel: false,
+          tabBarLabel: 'Home',
+          tabBarIcon: ({ color, size }) => (
+            <Icon name="book" size={size} color={color} />
           ),
         }}
       />
@@ -57,7 +58,7 @@ function BottomNavBarTabs() {
         options={{
           tabBarShowLabel: false,
           tabBarLabel: 'Learn',
-          tabBarIcon: ({color, size}) => (
+          tabBarIcon: ({ color, size }) => (
             <Icon name="graduation-cap" size={size} color={color} />
           ),
         }}
@@ -68,7 +69,7 @@ function BottomNavBarTabs() {
         options={{
           tabBarShowLabel: false,
           tabBarLabel: 'Profile',
-          tabBarIcon: ({color, size}) => (
+          tabBarIcon: ({ color, size }) => (
             <Icon name="user" size={size} color={color} />
           ),
         }}
@@ -81,11 +82,11 @@ function JournalStack() {
   return (
     <Stack.Navigator>
       <Stack.Screen name="Journal Home"
-      options={{
-        headerShown: false,
-        animation: 'slide_from_bottom',
-      }}
-      component={JournalScreen} />
+        options={{
+          headerShown: false,
+          animation: 'slide_from_bottom',
+        }}
+        component={JournalScreen} />
     </Stack.Navigator>
   );
 }
@@ -94,11 +95,17 @@ function DCStack() {
   return (
     <Stack.Navigator>
       <Stack.Screen name="DC Home"
-      options={{
-        headerShown: false,
-        animation: 'slide_from_bottom',
-      }}
-      component={DCScreen} />
+        options={{
+          headerShown: false,
+          animation: 'slide_from_bottom',
+        }}
+        component={DCScreen} />
+      <Stack.Screen name="Settings"
+        options={{
+          headerShown: false,
+          animation: 'slide_from_bottom',
+        }}
+        component={SettingsScreen} />
     </Stack.Navigator>
   );
 }
@@ -107,11 +114,11 @@ function LearnStack() {
   return (
     <Stack.Navigator>
       <Stack.Screen name="Tool Home"
-      options={{
-        headerShown: false,
-        animation: 'slide_from_bottom',
-      }}
-      component={LearnScreen} />
+        options={{
+          headerShown: false,
+          animation: 'slide_from_bottom',
+        }}
+        component={LearnScreen} />
     </Stack.Navigator>
   );
 }
@@ -120,11 +127,11 @@ function ProfileStack() {
   return (
     <Stack.Navigator>
       <Stack.Screen name="Profile Home"
-      options={{
-        headerShown: false,
-        animation: 'slide_from_bottom',
-      }}
-      component={ProfileScreen} />
+        options={{
+          headerShown: false,
+          animation: 'slide_from_bottom',
+        }}
+        component={ProfileScreen} />
     </Stack.Navigator>
   );
 }

@@ -5,7 +5,7 @@ import { COLORS } from '../theme/theme';
 const LearnScreen = (props) => {
     return (
         <>
-            <StatusBar barStyle="dark-content" />
+            <StatusBar barStyle="default" />
             <SafeAreaView style={styles.screenContainer}>
                 <Text style={styles.title}>Learn</Text>
             </SafeAreaView>

@@ -1,25 +1,27 @@
 import React, { useState, useEffect } from 'react';
 import { View, SafeAreaView, StatusBar, Text, StyleSheet, Image } from 'react-native';
+import DatePicker from 'react-native-date-picker';
+import { differenceInMilliseconds } from 'date-fns';
 // stuff for ble
 import {
-    Platform,
-    ScrollView,
-    Dimensions,
-    NativeModules,
-    useColorScheme,
-    TouchableOpacity,
-    NativeEventEmitter,
-    PermissionsAndroid,
-    TouchableHighlight,
-    Modal,
+  Platform,
+  ScrollView,
+  Dimensions,
+  NativeModules,
+  useColorScheme,
+  TouchableOpacity,
+  NativeEventEmitter,
+  PermissionsAndroid,
+  TouchableHighlight,
+  Modal,
 } from 'react-native';
 import BleManager, {
-    BleDisconnectPeripheralEvent,
-    BleManagerDidUpdateValueForCharacteristicEvent,
-    BleScanCallbackType,
-    BleScanMatchMode,
-    BleScanMode,
-    Peripheral,
+  BleDisconnectPeripheralEvent,
+  BleManagerDidUpdateValueForCharacteristicEvent,
+  BleScanCallbackType,
+  BleScanMatchMode,
+  BleScanMode,
+  Peripheral,
 } from 'react-native-ble-manager';
 
 import { COLORS } from '../theme/theme';
@@ -32,7 +34,7 @@ const SERVICE_UUIDS: string[] = ['7504e3b0-fd7a-4b56-b74d-c6e7eeed3f19'];
 //const SERVICE_UUIDS: string[] = [];
 const ALLOW_DUPLICATES = false;
 
-const DCScreen = () => {
+const DCScreen = ({ navigation }: { navigation: any }) => {
   const [isConnectPopupVisible, setIsConnectPopupVisible] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [connectedPeripherals, setConnectedPeripherals] = useState(
@@ -42,6 +44,12 @@ const DCScreen = () => {
     new Map<Peripheral['id'], Peripheral>(),
   );
   const [peripheralReadData, setPeripheralReadData] = useState('No Data Yet');
+  const [isMaskSleep, setIsMaskSleep] = useState(false);
+
+  const [startTimeWindow, setStartTimeWindow] = useState(new Date());
+  const [endTimeWindow, setEndTimeWindow] = useState(new Date());
+  const [startTimePopOpen, setStartTimePopOpen] = useState(false);
+  const [endTimePopOpen, setEndTimePopOpen] = useState(false);
 
   const startScan = () => {
     if (!isScanning) {
@@ -168,6 +176,8 @@ const DCScreen = () => {
           }
           return map;
         });
+
+        setIsMaskSleep(false);
 
         // before retrieving services, it is often a good idea to let bonding & connection finish properly
         await sleep(900);
@@ -321,7 +331,7 @@ const DCScreen = () => {
   // initializes the BleManager and sets up event listeners
   useEffect(() => {
     try {
-      BleManager.start({showAlert: false})
+      BleManager.start({ showAlert: false })
         .then(() => console.debug('BleManager started.'))
         .catch((error: any) =>
           console.error('BeManager could not be started.', error),
@@ -407,7 +417,7 @@ const DCScreen = () => {
     }
   };
 
-  const renderItem = ({item}: {item: Peripheral}) => {
+  const renderItem = ({ item }: { item: Peripheral }) => {
     const backgroundColor = connectedPeripherals.has(item.id) ? '#069400' : '#6e6ea0'; // green if connected, light blue if not
     if (item.name === null || !item.name?.includes('ESP32')) {
       //return null;
@@ -417,7 +427,7 @@ const DCScreen = () => {
       <TouchableHighlight
         underlayColor="#D3D3D3" // light gray
         onPress={() => togglePeripheralConnection(item)}>
-        <View style={[styles.row, {backgroundColor}]}>
+        <View style={[styles.row, { backgroundColor }]}>
           <Text style={styles.peripheralName}>
             {/* completeLocalName (item.name) & shortAdvertisingName (advertising.localName) may not always be the same */}
             {item.name} - {item?.advertising?.localName}
@@ -432,163 +442,281 @@ const DCScreen = () => {
   const ConnectPopUp = () => {
     return (
       <Modal
-      visible={isConnectPopupVisible}
-      animationType='fade'
-      transparent={true}
-      onRequestClose={() => setIsConnectPopupVisible(false)}
+        visible={isConnectPopupVisible}
+        animationType='fade'
+        transparent={true}
+        onRequestClose={() => setIsConnectPopupVisible(false)}
       >
-      <View style={popupStyles.popupOverlay}>
-        <View style={popupStyles.popup}>
-        <View style={popupStyles.popupHeader}>
-          <TouchableOpacity onPress={() => setIsConnectPopupVisible(false)}>
-          <Text style={popupStyles.closeButton}>x</Text>
-          </TouchableOpacity>
+        <View style={popupStyles.popupOverlay}>
+          <View style={popupStyles.popup}>
+            <View style={popupStyles.popupHeader}>
+              <TouchableOpacity onPress={() => setIsConnectPopupVisible(false)}>
+                <Text style={popupStyles.closeButton}>x</Text>
+              </TouchableOpacity>
 
-          <Text style={popupStyles.popupTitle}>Nearby Masks</Text>
+              <Text style={popupStyles.popupTitle}>Nearby Masks</Text>
 
-          <TouchableOpacity onPress={() => { /* Handle edit */ }}>
-          <Text style={popupStyles.editButton}>Edit</Text>
-          </TouchableOpacity>
+              <TouchableOpacity onPress={() => { /* Handle edit */ }}>
+                <Text style={popupStyles.editButton}>Edit</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View>
+              <TouchableOpacity onPress={startScan} style={styles.scanButton}>
+                <Text style={styles.scanButtonText}>Scan for Peripherals</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView>
+              {Array.from(discoveredPeripherals.values()).map((item) => (
+                <View key={item.id}>{renderItem({ item })}</View>
+              ))}
+              {Array.from(connectedPeripherals.values()).map((item) => (
+                <View key={item.id}>{renderItem({ item })}</View>
+              ))}
+            </ScrollView>
+          </View>
         </View>
-
-        <View>
-          <TouchableOpacity onPress={startScan} style={styles.scanButton}>
-          <Text style={styles.scanButtonText}>Scan for Peripherals</Text>
-          </TouchableOpacity>
-        </View>
-
-        <ScrollView>
-          {Array.from(discoveredPeripherals.values()).map((item) => (
-          <View key={item.id}>{renderItem({item})}</View>
-          ))}
-          {Array.from(connectedPeripherals.values()).map((item) => (
-          <View key={item.id}>{renderItem({item})}</View>
-          ))}
-        </ScrollView>
-        </View>
-      </View>
       </Modal>
     );
   };
 
-    return (
-        <>
-            <StatusBar barStyle="dark-content" />
-            <SafeAreaView style={styles.screenContainer}>
-              <ConnectPopUp />
-                <Text style={styles.title}>Dream Catcher</Text>
+  const StartTimePopUp = () => {
+    return <>
+      <DatePicker
+        modal
+        mode="time"
+        open={startTimePopOpen}
+        date={startTimeWindow}
+        onConfirm={(date) => {
+          setStartTimePopOpen(false)
+          setStartTimeWindow(date)
+        }}
+        onCancel={() => {
+          setStartTimePopOpen(false)
+        }}
+      />
+    </>
+  };
 
-                <View style={styles.mainContainer}>
-                  <TouchableOpacity onPress={() => setIsConnectPopupVisible(true)} 
-                  style={styles.scanButton}>
-                    {Array.from(connectedPeripherals.values()).length === 0 ? 
-                    <Text style={styles.scanButtonText}>
-                      Connect</Text> :
-                    <Text style={styles.scanButtonText}>
-                      Connected</Text>}
-                  </TouchableOpacity>
-                  
+  const EndTimePopUp = () => {
+    return <>
+      <DatePicker
+        modal
+        mode="time"
+        open={endTimePopOpen}
+        date={endTimeWindow}
+        onConfirm={(date) => {
+          setEndTimePopOpen(false)
+          setEndTimeWindow(date)
+        }}
+        onCancel={() => {
+          setEndTimePopOpen(false)
+        }}
+      />
+    </>
+  };
 
-                  <Image source={require('../../src/images/mask.png')}
-                  resizeMode='contain'
-                  style={styles.maskImage} />
+  // sends esp32 a set of strings that represent the time window
+  // startTime: [time in seconds]
+  // scanTime: [time in seconds]
+  // startTime is the number of seconds to sleep right now before checking for REM
+  // scanTime is the number of seconds to check for REM
+  const sendTimeInfo = () => {
+    var startTime = (differenceInMilliseconds(startTimeWindow, new Date()) / 1000).toString();
+    writePeripheral("startTime: " + parseInt(startTime));
 
-                  <View style={styles.onOffContainer}>
-                  <TouchableOpacity onPress={() => writePeripheral('light: off')} style={styles.scanButton}>
-                    <Text style={styles.scanButtonText}>
-                      Turn Off LED</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={() => writePeripheral('light: on')} style={styles.scanButton}>
-                    <Text style={styles.scanButtonText}>
-                      Turn On LED</Text>
-                  </TouchableOpacity>
-                  </View>
+    var scanTime = (differenceInMilliseconds(endTimeWindow, startTimeWindow) / 1000).toString();
+    writePeripheral("scanTime: " + scanTime);
 
-                  <View style={styles.onOffContainer}>
-                  <TouchableOpacity onPress={() => writePeripheral('trick: yes')} style={styles.scanButton}>
-                    <Text style={styles.scanButtonText}>
-                      Do a Trick</Text>
-                  </TouchableOpacity>
-                  </View>
-                  
+    setIsMaskSleep(true);
+  }
 
+  return (
+    <>
+      <StatusBar barStyle="default" />
+      <SafeAreaView style={styles.screenContainer}>
+        <ConnectPopUp />
+        <StartTimePopUp />
+        <EndTimePopUp />
+
+
+        <Text style={styles.title}>Dream Catcher</Text>
+        <ScrollView showsVerticalScrollIndicator={false}>
+          <View style={styles.mainContainer}>
+            <TouchableOpacity onPress={() => setIsConnectPopupVisible(true)}
+              style={styles.scanButton}>
+              {Array.from(connectedPeripherals.values()).length === 0 ?
+                <Text style={styles.scanButtonText}>
+                  Connect</Text> :
+                <Text style={styles.scanButtonText}>
+                  Connected</Text>}
+            </TouchableOpacity>
+
+            {isMaskSleep ?
+              <Text style={styles.scanButtonText}>
+                Mask is Asleep</Text> :
+              <Text style={styles.scanButtonText}>
+                Mask is not asleep for certain?</Text>}
+
+
+            <Image source={require('../../src/images/mask.png')}
+              resizeMode='contain'
+              style={styles.maskImage} />
+
+            <View style={styles.onOffContainer}>
+              <TouchableOpacity onPress={() => writePeripheral('light: off')} style={styles.scanButton}>
+                <Text style={styles.scanButtonText}>
+                  Turn Off LED</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => writePeripheral('light: on')} style={styles.scanButton}>
+                <Text style={styles.scanButtonText}>
+                  Turn On LED</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => writePeripheral('trick: yes')} style={styles.scanButton}>
+                <Text style={styles.scanButtonText}>
+                  Do a Trick</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.setTimerContainer}>
+
+              <View style={styles.timeTextContainer}>
+                <TouchableOpacity onPress={() => setStartTimePopOpen(true)} style={styles.scanButton}>
+                  <Text style={styles.scanButtonText}>
+                    Set Start Time</Text>
+                </TouchableOpacity>
+                <View style={styles.timerText}>
+                  <Text style={styles.timerText}>
+                    {startTimeWindow.toLocaleTimeString()}
+                  </Text>
                 </View>
-            </SafeAreaView>
-        </>
-    );
+              </View>
+
+              <View style={styles.timeTextContainer}>
+                <TouchableOpacity onPress={() => setEndTimePopOpen(true)} style={styles.scanButton}>
+                  <Text style={styles.scanButtonText}>
+                    Set End Time</Text>
+                </TouchableOpacity>
+                <View style={styles.timerText}>
+                  <Text style={styles.timerText}>
+                    {endTimeWindow.toLocaleTimeString()}
+                  </Text>
+                </View>
+              </View>
+
+              <TouchableOpacity onPress={() => sendTimeInfo()}
+                style={styles.scanButton}>
+                <Text style={styles.scanButtonText}>
+                  Submit</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View>
+              <TouchableOpacity onPress={() => navigation.navigate('Settings')}
+                style={styles.scanButton}>
+                <Text style={styles.scanButtonText}>
+                  Settings Screen</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+          <View style={styles.navBarOffset} />
+        </ScrollView>
+      </SafeAreaView>
+    </>
+  );
 };
 
 export default DCScreen;
 
 const boxShadow = {
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 2,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
-  };
+  shadowColor: '#000',
+  shadowOffset: {
+    width: 2,
+    height: 2,
+  },
+  shadowOpacity: 0.25,
+  shadowRadius: 3.84,
+  elevation: 5,
+};
 
 const styles = StyleSheet.create({
-    screenContainer: {
-        flex: 1,
-        backgroundColor: COLORS.tirtiaryBlueHex,
-    },
-    title: {
-        fontSize: 30,
-        color: COLORS.whiteHex,
-        fontWeight: 'bold',
-        textAlign: 'center',
-        margin: 10,
-    },
-    maskImage: {
-        width: '90%',
-        height: 200,
-        margin: 20,
-    },
-    mainContainer: {
-        flex: 1,
-    },
-    scanButton: {
-        backgroundColor: COLORS.primaryPurpleHex,
-        padding: 20,
-        borderRadius: 10,
-        margin: 10,
-    },
-    scanButtonText: {
-        color: COLORS.whiteHex,
-        fontSize: 16,
-        textAlign: 'center',
-    },
-    onOffContainer: {
-        flexDirection: 'row',
-        justifyContent: 'space-evenly',
-        margin: 10,
-    },
-    peripheralName: {
-        fontSize: 16,
-        textAlign: 'center',
-        padding: 10,
-      },
-      rssi: {
-        fontSize: 12,
-        textAlign: 'center',
-        padding: 2,
-      },
-      peripheralId: {
-        fontSize: 12,
-        textAlign: 'center',
-        padding: 2,
-        paddingBottom: 20,
-      },
-      row: {
-        marginLeft: 10,
-        marginRight: 10,
-        borderRadius: 20,
-        ...boxShadow,
-      },
+  screenContainer: {
+    flex: 1,
+    backgroundColor: COLORS.tirtiaryBlueHex,
+  },
+  title: {
+    fontSize: 30,
+    color: COLORS.whiteHex,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    margin: 10,
+  },
+  maskImage: {
+    width: '90%',
+    height: 200,
+    margin: 20,
+  },
+  mainContainer: {
+    flex: 1,
+  },
+  scanButton: {
+    backgroundColor: COLORS.primaryPurpleHex,
+    padding: 20,
+    borderRadius: 10,
+    margin: 10,
+  },
+  scanButtonText: {
+    color: COLORS.whiteHex,
+    fontSize: 16,
+    textAlign: 'center',
+  },
+  onOffContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-evenly',
+    margin: 5,
+  },
+  setTimerContainer: {
+    flexDirection: 'column',
+    justifyContent: 'space-evenly',
+    margin: 10,
+  },
+  timeTextContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-evenly',
+    margin: 10,
+  },
+  timerText: {
+    fontSize: 20,
+    color: COLORS.whiteHex,
+    textAlign: 'center',
+    margin: 10,
+  },
+  peripheralName: {
+    fontSize: 16,
+    textAlign: 'center',
+    padding: 10,
+  },
+  rssi: {
+    fontSize: 12,
+    textAlign: 'center',
+    padding: 2,
+  },
+  peripheralId: {
+    fontSize: 12,
+    textAlign: 'center',
+    padding: 2,
+    paddingBottom: 20,
+  },
+  navBarOffset: {
+    marginTop: 80,
+  },
+  row: {
+    marginLeft: 10,
+    marginRight: 10,
+    borderRadius: 20,
+    ...boxShadow,
+  },
 });
 
 const popupStyles = StyleSheet.create({
