@@ -102,7 +102,7 @@ function DCStack() {
         component={DCScreen} />
       <Stack.Screen name="Settings"
         options={{
-          headerShown: false,
+          headerShown: true,
           animation: 'slide_from_bottom',
         }}
         component={SettingsScreen} />
