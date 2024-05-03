@@ -12,6 +12,7 @@ import DCScreen from './src/screens/DCScreen';
 import LearnScreen from './src/screens/LearnScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
+import ConnectScreen from './src/screens/ConnectScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -21,7 +22,7 @@ function BottomNavBarTabs() {
     <Tab.Navigator
       initialRouteName="Feed"
       screenOptions={{
-        tabBarActiveTintColor: COLORS.primaryPurpleHex,
+        tabBarActiveTintColor: COLORS.primaryBlueHex,
         tabBarInactiveTintColor: COLORS.primaryGrayHex,
         headerShown: false,
         tabBarStyle: styles.tabBarStyle,
@@ -94,6 +95,12 @@ function JournalStack() {
 function DCStack() {
   return (
     <Stack.Navigator>
+      <Stack.Screen name="Connect Screen"
+        options={{
+          headerShown: false,
+          animation: 'slide_from_bottom',
+        }}
+        component={ConnectScreen} />
       <Stack.Screen name="DC Home"
         options={{
           headerShown: false,
