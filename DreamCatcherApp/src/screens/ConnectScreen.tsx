@@ -1,19 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { View, SafeAreaView, StatusBar, Text, StyleSheet, ImageBackground } from 'react-native';
-import DatePicker from 'react-native-date-picker';
-import { differenceInMilliseconds } from 'date-fns';
 // stuff for ble
 import {
     Platform,
     ScrollView,
-    Dimensions,
     NativeModules,
-    useColorScheme,
     TouchableOpacity,
     NativeEventEmitter,
     PermissionsAndroid,
     TouchableHighlight,
-    Modal,
 } from 'react-native';
 import BleManager, {
     BleDisconnectPeripheralEvent,
@@ -35,7 +30,6 @@ const SERVICE_UUIDS: string[] = ['7504e3b0-fd7a-4b56-b74d-c6e7eeed3f19'];
 const ALLOW_DUPLICATES = false;
 
 const ConnectScreen = ({ navigation }: { navigation: any }) => {
-    const [isConnectPopupVisible, setIsConnectPopupVisible] = useState(false);
     const [isScanning, setIsScanning] = useState(false);
     const [connectedPeripherals, setConnectedPeripherals] = useState(
         new Map<Peripheral['id'], Peripheral>(),
@@ -43,13 +37,6 @@ const ConnectScreen = ({ navigation }: { navigation: any }) => {
     const [discoveredPeripherals, setDiscoveredPeripherals] = useState(
         new Map<Peripheral['id'], Peripheral>(),
     );
-    const [peripheralReadData, setPeripheralReadData] = useState('No Data Yet');
-    const [isMaskSleep, setIsMaskSleep] = useState(false);
-
-    const [startTimeWindow, setStartTimeWindow] = useState(new Date());
-    const [endTimeWindow, setEndTimeWindow] = useState(new Date());
-    const [startTimePopOpen, setStartTimePopOpen] = useState(false);
-    const [endTimePopOpen, setEndTimePopOpen] = useState(false);
 
     const startScan = () => {
         if (!isScanning) {
@@ -129,39 +116,6 @@ const ConnectScreen = ({ navigation }: { navigation: any }) => {
         }
     };
 
-    // gets list of ble peripherals connected to the device, updates the peripherals map
-    const retrieveConnected = async () => {
-        try {
-            const connectedPeripherals = await BleManager.getConnectedPeripherals();
-            if (connectedPeripherals.length === 0) {
-                console.warn('[retrieveConnected] No connected peripherals found.');
-                return;
-            }
-
-            console.debug(
-                '[retrieveConnected] connectedPeripherals',
-                connectedPeripherals,
-            );
-
-            for (var i = 0; i < connectedPeripherals.length; i++) {
-                var peripheral = connectedPeripherals[i];
-
-                setConnectedPeripherals(map => {
-                    let p = map.get(peripheral.id);
-                    if (p) {
-                        return new Map(map.set(p.id, p));
-                    }
-                    return map;
-                });
-            }
-        } catch (error) {
-            console.error(
-                '[retrieveConnected] unable to retrieve connected peripherals.',
-                error,
-            );
-        }
-    };
-
     // connects device to given peripheral, updates the peripherals map
     const connectPeripheral = async (peripheral: Peripheral) => {
         try {
@@ -176,8 +130,6 @@ const ConnectScreen = ({ navigation }: { navigation: any }) => {
                     }
                     return map;
                 });
-
-                setIsMaskSleep(false);
 
                 // before retrieving services, it is often a good idea to let bonding & connection finish properly
                 await sleep(900);
@@ -238,88 +190,6 @@ const ConnectScreen = ({ navigation }: { navigation: any }) => {
                 `[connectPeripheral][${peripheral.id}] connectPeripheral error`,
                 error,
             );
-        }
-    };
-
-    const readPeripheral = async () => {
-        try {
-            const connectedPeripherals = await BleManager.getConnectedPeripherals();
-            if (connectedPeripherals.length === 0) {
-                console.warn('[readPeripheral] No connected peripherals found.');
-                setPeripheralReadData('Not Connected to a peripheral');
-                return;
-            }
-
-            console.debug(
-                '[readPeripheral] connectedPeripherals to scan for data',
-                connectedPeripherals,
-            );
-
-            for (var i = 0; i < connectedPeripherals.length; i++) {
-                var peripheral = connectedPeripherals[i];
-                // Now you are connected to the peripheral, and you have its services and characteristics.
-                // You can read a characteristic like this:
-                let service = 'dff3db14-65be-4e80-9852-0bbff6037651'; // replace with your service UUID
-                let characteristic = '80eb899b-b325-4120-b604-df06ec01af12'; // replace with your characteristic UUID
-                BleManager.read(peripheral.id, service, characteristic)
-                    .then(data => {
-                        // Success code
-                        console.log('Read:', data);
-                        setPeripheralReadData(data.toString());
-                    })
-                    .catch(error => {
-                        // Failure code
-                        console.log(error);
-                    });
-            }
-        } catch (error) {
-            console.error('[readPeripheral] unable to read peripheral data.', error);
-        }
-    };
-
-    const writePeripheral = async (writeData: string) => {
-        try {
-            const connectedPeripherals = await BleManager.getConnectedPeripherals();
-            if (connectedPeripherals.length === 0) {
-                console.warn('[writePeripheral] No connected peripherals found.');
-                return;
-            }
-
-            console.debug(
-                '[writePeripheral] connectedPeripherals to write data to',
-                connectedPeripherals,
-            );
-
-            let asciiArray = [];
-
-            for (let i = 0; i < writeData.length; i++) {
-                asciiArray.push(writeData.charCodeAt(i));
-            }
-
-            for (var i = 0; i < connectedPeripherals.length; i++) {
-                var peripheral = connectedPeripherals[i];
-                // Now you are connected to the peripheral, and you have its services and characteristics.
-                // You can read a characteristic like this:
-                let service = '7504e3b0-fd7a-4b56-b74d-c6e7eeed3f19'; // replace with your service UUID
-                let characteristic = '8b38e5b5-2b9a-4954-9281-fcab195b0912'; // replace with your characteristic UUID
-                BleManager.write(
-                    peripheral.id,
-                    service,
-                    characteristic,
-                    asciiArray,
-                )
-                    .then(() => {
-                        console.log("Wrote " + writeData + " to characteristic " + characteristic);
-                    })
-                    .catch(error => {
-                        console.error(
-                            'Failed to write data to characteristic ' + characteristic,
-                            error,
-                        );
-                    });
-            }
-        } catch (error) {
-            console.error('[writePeripheral] unable to write peripheral data.', error);
         }
     };
 
