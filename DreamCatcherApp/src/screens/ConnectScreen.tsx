@@ -46,10 +46,13 @@ const ConnectScreen = ({ navigation }: { navigation: any }) => {
             try {
                 console.debug('[startScan] starting scan...');
                 setIsScanning(true);
-                BleManager.scan(SERVICE_UUIDS, SECONDS_TO_SCAN_FOR, ALLOW_DUPLICATES, {
-                    matchMode: BleScanMatchMode.Sticky,
-                    scanMode: BleScanMode.LowLatency,
-                    callbackType: BleScanCallbackType.AllMatches,
+                BleManager.scan({
+                serviceUUIDs: SERVICE_UUIDS,
+                seconds: SECONDS_TO_SCAN_FOR,
+                allowDuplicates: ALLOW_DUPLICATES,
+                matchMode: BleScanMatchMode.Sticky,
+                scanMode: BleScanMode.LowLatency,
+                callbackType: BleScanCallbackType.AllMatches,
                 })
                     .then(() => {
                         console.debug('[startScan] scan promise returned successfully.');
