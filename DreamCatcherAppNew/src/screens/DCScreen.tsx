@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, SafeAreaView, StatusBar, Text, StyleSheet, Image } from 'react-native';
-import DatePicker from 'react-native-date-picker';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { differenceInMilliseconds } from 'date-fns';
 // stuff for ble
 import {
@@ -485,39 +485,39 @@ const DCScreen = ({ navigation }: { navigation: any }) => {
   };
 
   const StartTimePopUp = () => {
-    return <>
-      <DatePicker
-        modal
+    return startTimePopOpen ? (
+      <DateTimePicker
+        value={startTimeWindow}
         mode="time"
-        open={startTimePopOpen}
-        date={startTimeWindow}
-        onConfirm={(date) => {
-          setStartTimePopOpen(false)
-          setStartTimeWindow(date)
-        }}
-        onCancel={() => {
-          setStartTimePopOpen(false)
+        display="spinner"
+        onChange={(event, selectedDate) => {
+          if (event.type === 'set' && selectedDate) {
+            setStartTimeWindow(selectedDate);
+            setStartTimePopOpen(false);
+          } else {
+            setStartTimePopOpen(false);
+          }
         }}
       />
-    </>
+    ) : null;
   };
 
   const EndTimePopUp = () => {
-    return <>
-      <DatePicker
-        modal
+    return endTimePopOpen ? (
+      <DateTimePicker
+        value={endTimeWindow}
         mode="time"
-        open={endTimePopOpen}
-        date={endTimeWindow}
-        onConfirm={(date) => {
-          setEndTimePopOpen(false)
-          setEndTimeWindow(date)
-        }}
-        onCancel={() => {
-          setEndTimePopOpen(false)
+        display="spinner"
+        onChange={(event, selectedDate) => {
+          if (event.type === 'set' && selectedDate) {
+            setEndTimeWindow(selectedDate);
+            setEndTimePopOpen(false);
+          } else {
+            setEndTimePopOpen(false);
+          }
         }}
       />
-    </>
+    ) : null;
   };
 
   // sends esp32 a set of strings that represent the time window

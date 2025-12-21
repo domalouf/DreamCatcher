@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@react-native-community/blur": "^4.4.1",
+    "@react-native-community/datetimepicker": "^8.2.0",
     "@react-native-vector-icons/fontawesome": "^12.4.0",
     "@react-native/new-app-screen": "0.83.1",
     "@react-navigation/bottom-tabs": "^7.9.0",
@@ -20,7 +21,6 @@
     "react": "19.2.0",
     "react-native": "0.83.1",
     "react-native-ble-manager": "^12.4.2",
-    "react-native-date-picker": "^5.0.13",
     "react-native-modal": "^14.0.0-rc.1",
     "react-native-safe-area-context": "^5.6.2",
     "react-native-screens": "^4.19.0",
