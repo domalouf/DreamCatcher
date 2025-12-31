@@ -8,6 +8,7 @@ import {
     TouchableOpacity,
     Switch,
 } from 'react-native';
+// @ts-ignore
 import FeatherIcon from 'react-native-vector-icons/Feather';
 import { COLORS } from '../theme/theme';
 
