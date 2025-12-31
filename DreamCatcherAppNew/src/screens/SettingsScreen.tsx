@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
 import {
     StyleSheet,
-    SafeAreaView,
     View,
     ScrollView,
     Text,
     TouchableOpacity,
     Switch,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 // @ts-ignore
 import FeatherIcon from 'react-native-vector-icons/Feather';
 import { COLORS } from '../theme/theme';

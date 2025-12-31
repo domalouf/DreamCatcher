@@ -20,7 +20,7 @@ const Stack = createNativeStackNavigator();
 function BottomNavBarTabs() {
   return (
     <Tab.Navigator
-      initialRouteName="DC"
+      initialRouteName="Journal"
       screenOptions={{
         tabBarActiveTintColor: COLORS.primaryBlueHex,
         tabBarInactiveTintColor: COLORS.primaryGrayHex,

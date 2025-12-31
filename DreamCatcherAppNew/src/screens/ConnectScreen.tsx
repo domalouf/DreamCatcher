@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, SafeAreaView, StatusBar, Text, StyleSheet, ImageBackground } from 'react-native';
+import { View, StatusBar, Text, StyleSheet, ImageBackground } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 // stuff for ble
 import {
     Platform,
@@ -315,7 +316,7 @@ const ConnectScreen = ({ navigation }: { navigation: any }) => {
     return (
         <>
             <StatusBar barStyle="default" />
-            <SafeAreaView style={styles.screenContainer}>
+            <SafeAreaView style={styles.screenContainer} edges={['top', 'left', 'right']}>
                 <ImageBackground source={require('../../src/images/starBackground.png')}
                     style={styles.bgImage}>
 

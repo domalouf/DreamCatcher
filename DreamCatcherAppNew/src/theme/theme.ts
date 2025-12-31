@@ -5,6 +5,7 @@ interface Color {
     primaryPurpleHex: string;
     secondaryPurpleHex: string;
     primaryGrayHex: string;
+    primaryOrangeHex: string;
     whiteHex: string;
   }
   
@@ -15,5 +16,6 @@ interface Color {
     primaryPurpleHex: '#AF6BF2',
     secondaryPurpleHex: '#764D8F',
     primaryGrayHex: '#515050',
+    primaryOrangeHex: '#FF9500',
     whiteHex: '#FFFFFF',
   };

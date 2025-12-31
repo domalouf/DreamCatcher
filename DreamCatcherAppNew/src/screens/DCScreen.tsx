@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, SafeAreaView, StatusBar, Text, StyleSheet, Image } from 'react-native';
+import { View, StatusBar, Text, StyleSheet, Image } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { differenceInMilliseconds } from 'date-fns';
 // stuff for ble
