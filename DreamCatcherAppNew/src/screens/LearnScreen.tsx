@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, SafeAreaView, StatusBar, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, StatusBar, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { COLORS } from '../theme/theme';
 
 const LearnScreen = () => {

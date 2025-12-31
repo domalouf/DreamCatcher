@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
     View,
     StatusBar,
@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS } from '../theme/theme';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface DreamEntry {
     id: string;
@@ -27,6 +28,31 @@ const JournalScreen = (props: any) => {
     const [dreamTitle, setDreamTitle] = useState('');
     const [dreamContent, setDreamContent] = useState('');
     const [selectedEntry, setSelectedEntry] = useState<DreamEntry | null>(null);
+    const STORAGE_KEY = '@dream_entries_v1';
+
+    useEffect(() => {
+        const loadEntries = async () => {
+            try {
+                const stored = await AsyncStorage.getItem(STORAGE_KEY);
+                if (stored) {
+                    setEntries(JSON.parse(stored));
+                }
+            } catch (error) {
+                console.warn('[Journal] Failed to load saved entries', error);
+            }
+        };
+        loadEntries();
+    }, []);
+
+    const persistEntries = async (updater: (prev: DreamEntry[]) => DreamEntry[]) => {
+        setEntries(prev => {
+            const next = updater(prev);
+            AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next)).catch((error: any) =>
+                console.warn('[Journal] Failed to persist entries', error),
+            );
+            return next;
+        });
+    };
 
     const getTodayDate = () => {
         const today = new Date();
@@ -50,14 +76,14 @@ const JournalScreen = (props: any) => {
             content: dreamContent,
         };
 
-        setEntries([newEntry, ...entries]);
+        persistEntries(prev => [newEntry, ...prev]);
         setDreamTitle('');
         setDreamContent('');
         setModalVisible(false);
     };
 
     const handleDeleteEntry = (id: string) => {
-        setEntries(entries.filter(entry => entry.id !== id));
+        persistEntries(prev => prev.filter(entry => entry.id !== id));
         setSelectedEntry(null);
     };
 

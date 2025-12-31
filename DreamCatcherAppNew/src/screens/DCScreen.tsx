@@ -28,6 +28,15 @@ import BleManager, {
 import { COLORS } from '../theme/theme';
 
 const BleManagerModule = NativeModules.BleManager;
+
+// RN expects native modules to expose addListener/removeListeners for NativeEventEmitter; stub to silence warnings until BLE work resumes.
+if (BleManagerModule && !BleManagerModule.addListener) {
+  BleManagerModule.addListener = () => {};
+}
+if (BleManagerModule && !BleManagerModule.removeListeners) {
+  BleManagerModule.removeListeners = () => {};
+}
+
 const bleManagerEmitter = new NativeEventEmitter(BleManagerModule);
 const SECONDS_TO_SCAN_FOR = 1;
 // the only uuids we are interested in
