@@ -65,12 +65,18 @@ const JournalScreen = (props: any) => {
         <TouchableOpacity
             style={styles.entryCard}
             onPress={() => setSelectedEntry(item)}
+            activeOpacity={0.7}
         >
-            <Text style={styles.entryDate}>{item.date}</Text>
-            <Text style={styles.entryTitle}>{item.title}</Text>
-            <Text style={styles.entryPreview} numberOfLines={2}>
-                {item.content}
-            </Text>
+            <View style={styles.orangeAccent} />
+            <View style={styles.cardContent}>
+                <View style={styles.dateContainer}>
+                    <Text style={styles.entryDate}>🌙 {item.date}</Text>
+                </View>
+                <Text style={styles.entryTitle}>{item.title}</Text>
+                <Text style={styles.entryPreview} numberOfLines={2}>
+                    {item.content}
+                </Text>
+            </View>
         </TouchableOpacity>
     );
 
@@ -78,19 +84,28 @@ const JournalScreen = (props: any) => {
         <>
             <StatusBar barStyle="default" />
             <SafeAreaView style={styles.screenContainer} edges={['top', 'left', 'right']}>
-                <Text style={styles.title}>Dream Journal</Text>
+                <View style={styles.headerContainer}>
+                    <Text style={styles.title}>✨ Dream Journal</Text>
+                    <View style={styles.decorativeCircle} />
+                    <View style={styles.decorativeCircle2} />
+                </View>
 
                 <TouchableOpacity
                     style={styles.addButton}
                     onPress={() => setModalVisible(true)}
+                    activeOpacity={0.85}
                 >
-                    <Text style={styles.addButtonText}>+ New Entry</Text>
+                    <View style={styles.addButtonInner}>
+                        <Text style={styles.addButtonIcon}>✦</Text>
+                        <Text style={styles.addButtonText}>New Entry</Text>
+                    </View>
                 </TouchableOpacity>
 
                 {entries.length === 0 ? (
                     <View style={styles.emptyState}>
+                        <Text style={styles.emptyStateIcon}>💭</Text>
                         <Text style={styles.emptyStateText}>
-                            No dreams recorded yet.{'\n'}Start capturing your dreams!
+                            No dreams recorded yet.{' '}Start capturing your dreams!
                         </Text>
                     </View>
                 ) : (
@@ -111,10 +126,15 @@ const JournalScreen = (props: any) => {
                 >
                     <View style={styles.modalOverlay}>
                         <View style={styles.modalContent}>
+                            <View style={styles.modalTopBar} />
                             <View style={styles.modalHeader}>
-                                <Text style={styles.modalTitle}>New Dream Entry</Text>
+                                <View>
+                                    <Text style={styles.modalTitle}>✨ New Dream Entry</Text>
+                                    <View style={styles.orangeUnderline} />
+                                </View>
                                 <TouchableOpacity
                                     onPress={() => setModalVisible(false)}
+                                    style={styles.closeButtonContainer}
                                 >
                                     <Text style={styles.closeButton}>✕</Text>
                                 </TouchableOpacity>
@@ -149,14 +169,18 @@ const JournalScreen = (props: any) => {
                                 <TouchableOpacity
                                     style={styles.cancelButton}
                                     onPress={() => setModalVisible(false)}
+                                    activeOpacity={0.7}
                                 >
                                     <Text style={styles.buttonText}>Cancel</Text>
                                 </TouchableOpacity>
                                 <TouchableOpacity
-                                    style={styles.saveButton}
                                     onPress={handleAddEntry}
+                                    activeOpacity={0.85}
+                                    style={styles.saveButtonContainer}
                                 >
-                                    <Text style={styles.buttonText}>Save</Text>
+                                    <View style={styles.saveButton}>
+                                        <Text style={styles.buttonText}>✓ Save</Text>
+                                    </View>
                                 </TouchableOpacity>
                             </View>
                         </View>
@@ -221,32 +245,69 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: COLORS.tirtiaryBlueHex,
     },
+    headerContainer: {
+        position: 'relative',
+        marginTop: 16,
+        marginLeft: 16,
+        marginBottom: 20,
+        overflow: 'hidden',
+    },
     title: {
         fontSize: 32,
         color: COLORS.whiteHex,
         fontWeight: '800',
-        marginTop: 16,
-        marginLeft: 16,
-        marginBottom: 20,
         letterSpacing: -0.5,
+        zIndex: 2,
+    },
+    decorativeCircle: {
+        position: 'absolute',
+        top: -20,
+        right: 20,
+        width: 80,
+        height: 80,
+        borderRadius: 40,
+        backgroundColor: COLORS.primaryOrangeHex,
+        opacity: 0.15,
+    },
+    decorativeCircle2: {
+        position: 'absolute',
+        top: 10,
+        right: -10,
+        width: 60,
+        height: 60,
+        borderRadius: 30,
+        backgroundColor: COLORS.primaryOrangeHex,
+        opacity: 0.06,
     },
     addButton: {
-        backgroundColor: COLORS.primaryPurpleHex,
         marginHorizontal: 16,
         marginBottom: 20,
-        paddingVertical: 14,
-        borderRadius: 12,
+        borderRadius: 14,
+        overflow: 'hidden',
         shadowColor: COLORS.primaryPurpleHex,
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-        elevation: 5,
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.35,
+        shadowRadius: 10,
+        elevation: 8,
+    },
+    addButtonInner: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 16,
+        gap: 8,
+        backgroundColor: COLORS.primaryPurpleHex,
+        borderRadius: 14,
+    },
+    addButtonIcon: {
+        color: COLORS.whiteHex,
+        fontSize: 20,
+        fontWeight: '600',
     },
     addButtonText: {
         color: COLORS.whiteHex,
         fontSize: 17,
         fontWeight: '700',
-        textAlign: 'center',
         letterSpacing: 0.3,
     },
     emptyState: {
@@ -254,6 +315,11 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         paddingHorizontal: 16,
+    },
+    emptyStateIcon: {
+        fontSize: 64,
+        marginBottom: 16,
+        opacity: 0.5,
     },
     emptyStateText: {
         color: COLORS.whiteHex,
@@ -267,18 +333,37 @@ const styles = StyleSheet.create({
         paddingBottom: 16,
     },
     entryCard: {
-        backgroundColor: 'rgba(175, 107, 242, 0.15)',
+        backgroundColor: 'rgba(124, 212, 198, 0.12)',
         borderRadius: 16,
-        padding: 16,
         marginBottom: 12,
         borderWidth: 1,
-        borderColor: 'rgba(175, 107, 242, 0.25)',
+        borderColor: 'rgba(124, 212, 198, 0.24)',
+        overflow: 'hidden',
+        shadowColor: COLORS.primaryPurpleHex,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 3,
+    },
+    orangeAccent: {
+        position: 'absolute',
+        left: 0,
+        top: 0,
+        bottom: 0,
+        width: 4,
+        backgroundColor: COLORS.primaryPurpleHex,
+    },
+    cardContent: {
+        padding: 16,
+        paddingLeft: 20,
+    },
+    dateContainer: {
+        marginBottom: 6,
     },
     entryDate: {
-        color: COLORS.primaryPurpleHex,
+        color: COLORS.primaryOrangeHex,
         fontSize: 12,
-        fontWeight: '600',
-        marginBottom: 6,
+        fontWeight: '700',
         letterSpacing: 0.5,
         textTransform: 'uppercase',
     },
@@ -303,21 +388,40 @@ const styles = StyleSheet.create({
         backgroundColor: COLORS.tirtiaryBlueHex,
         borderTopLeftRadius: 24,
         borderTopRightRadius: 24,
-        paddingTop: 20,
+        paddingTop: 8,
         paddingHorizontal: 16,
         paddingBottom: 32,
         maxHeight: '85%',
     },
+    modalTopBar: {
+        width: 40,
+        height: 4,
+        backgroundColor: COLORS.primaryOrangeHex,
+        borderRadius: 2,
+        alignSelf: 'center',
+        marginBottom: 16,
+        opacity: 0.6,
+    },
     modalHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
-        alignItems: 'center',
+        alignItems: 'flex-start',
         marginBottom: 20,
     },
     modalTitle: {
         fontSize: 22,
         fontWeight: '700',
         color: COLORS.whiteHex,
+    },
+    orangeUnderline: {
+        width: 50,
+        height: 3,
+        backgroundColor: COLORS.primaryOrangeHex,
+        borderRadius: 2,
+        marginTop: 6,
+    },
+    closeButtonContainer: {
+        padding: 4,
     },
     detailModalContent: {
         backgroundColor: COLORS.tirtiaryBlueHex,
@@ -336,7 +440,7 @@ const styles = StyleSheet.create({
         marginBottom: 20,
     },
     detailDate: {
-        color: COLORS.primaryPurpleHex,
+        color: COLORS.primaryOrangeHex,
         fontSize: 12,
         fontWeight: '600',
         marginBottom: 6,
@@ -368,37 +472,38 @@ const styles = StyleSheet.create({
         fontWeight: '700',
         marginBottom: 10,
         marginTop: 14,
-        letterSpacing: 0.5,
+        letterSpacing: 0.8,
         textTransform: 'uppercase',
     },
     titleInput: {
-        backgroundColor: 'rgba(175, 107, 242, 0.12)',
+        backgroundColor: 'rgba(124, 212, 198, 0.08)',
         borderRadius: 12,
         paddingHorizontal: 14,
         paddingVertical: 12,
         color: COLORS.whiteHex,
         fontSize: 16,
-        borderWidth: 1,
-        borderColor: 'rgba(175, 107, 242, 0.2)',
+        borderWidth: 1.5,
+        borderColor: 'rgba(124, 212, 198, 0.25)',
     },
     contentInput: {
-        backgroundColor: 'rgba(175, 107, 242, 0.12)',
+        backgroundColor: 'rgba(124, 212, 198, 0.08)',
         borderRadius: 12,
         paddingHorizontal: 14,
         paddingVertical: 12,
         color: COLORS.whiteHex,
         fontSize: 15,
-        borderWidth: 1,
-        borderColor: 'rgba(175, 107, 242, 0.2)',
+        borderWidth: 1.5,
+        borderColor: 'rgba(124, 212, 198, 0.25)',
         minHeight: 120,
         textAlignVertical: 'top',
     },
     charCount: {
-        color: COLORS.whiteHex,
+        color: COLORS.primaryOrangeHex,
         fontSize: 12,
-        opacity: 0.5,
+        opacity: 0.7,
         marginTop: 6,
         textAlign: 'right',
+        fontWeight: '600',
     },
     buttonContainer: {
         flexDirection: 'row',
@@ -408,22 +513,26 @@ const styles = StyleSheet.create({
     },
     cancelButton: {
         flex: 1,
-        backgroundColor: 'rgba(255, 255, 255, 0.15)',
+        backgroundColor: 'rgba(255, 255, 255, 0.08)',
         paddingVertical: 14,
         borderRadius: 12,
-        borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.2)',
+        borderWidth: 1.5,
+        borderColor: 'rgba(255, 255, 255, 0.14)',
+    },
+    saveButtonContainer: {
+        flex: 1,
+        borderRadius: 12,
+        overflow: 'hidden',
+        shadowColor: COLORS.primaryPurpleHex,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.4,
+        shadowRadius: 8,
+        elevation: 6,
     },
     saveButton: {
-        flex: 1,
-        backgroundColor: COLORS.primaryPurpleHex,
         paddingVertical: 14,
         borderRadius: 12,
-        shadowColor: COLORS.primaryPurpleHex,
-        shadowOffset: { width: 0, height: 3 },
-        shadowOpacity: 0.25,
-        shadowRadius: 6,
-        elevation: 4,
+        backgroundColor: COLORS.primaryPurpleHex,
     },
     buttonText: {
         color: COLORS.whiteHex,
@@ -432,15 +541,15 @@ const styles = StyleSheet.create({
         textAlign: 'center',
     },
     deleteButton: {
-        backgroundColor: 'rgba(231, 76, 60, 0.2)',
+        backgroundColor: 'rgba(255, 111, 97, 0.2)',
         paddingVertical: 14,
         borderRadius: 12,
         marginTop: 14,
         borderWidth: 1,
-        borderColor: 'rgba(231, 76, 60, 0.3)',
+        borderColor: 'rgba(255, 111, 97, 0.32)',
     },
     deleteButtonText: {
-        color: '#FF6B6B',
+        color: '#FF8A80',
         fontSize: 16,
         fontWeight: '700',
         textAlign: 'center',

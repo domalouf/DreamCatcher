@@ -10,12 +10,12 @@ interface Color {
   }
   
   export const COLORS: Color = {
-    primaryBlueHex: '#43ADD4',
-    secondaryBlueHex: '#2A6A8E',
-    tirtiaryBlueHex: '#1C0B4A',
-    primaryPurpleHex: '#AF6BF2',
-    secondaryPurpleHex: '#764D8F',
-    primaryGrayHex: '#515050',
-    primaryOrangeHex: '#FF9500',
+    primaryBlueHex: '#7CD4C6',
+    secondaryBlueHex: '#2B8C99',
+    tirtiaryBlueHex: '#0F2336',
+    primaryPurpleHex: '#FF6F61',
+    secondaryPurpleHex: '#F49C6B',
+    primaryGrayHex: '#4A5568',
+    primaryOrangeHex: '#FFC145',
     whiteHex: '#FFFFFF',
   };
