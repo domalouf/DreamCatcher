@@ -10,8 +10,10 @@ import {
     Modal,
     FlatList,
     Alert,
+    Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import LinearGradient from 'react-native-linear-gradient';
 import { COLORS } from '../theme/theme';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -108,40 +110,114 @@ const JournalScreen = (props: any) => {
 
     return (
         <>
-            <StatusBar barStyle="default" />
-            <SafeAreaView style={styles.screenContainer} edges={['top', 'left', 'right']}>
-                <View style={styles.headerContainer}>
-                    <Text style={styles.title}>✨ Dream Journal</Text>
-                    <View style={styles.decorativeCircle} />
-                    <View style={styles.decorativeCircle2} />
+            <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+            <View style={styles.screenContainer}>
+                {/* Fixed Landscape Image Background */}
+                <View style={styles.fixedBackground}>
+                    <Image 
+                        source={require('../images/landscape.jpg')}
+                        style={styles.landscapeImage}
+                        resizeMode="cover"
+                    />
+                    <LinearGradient
+                        colors={[
+                            'rgba(15, 35, 54, 0)',
+                            'rgba(15, 35, 54, 0.1)',
+                            'rgba(15, 35, 54, 0.3)',
+                            'rgba(15, 35, 54, 0.6)',
+                            'rgba(15, 35, 54, 0.85)',
+                            COLORS.tirtiaryBlueHex
+                        ]}
+                        locations={[0, 0.3, 0.5, 0.7, 0.9, 1]}
+                        start={{ x: 0.5, y: 0 }}
+                        end={{ x: 0.5, y: 1 }}
+                        style={styles.gradientOverlay}
+                    />
                 </View>
 
-                <TouchableOpacity
-                    style={styles.addButton}
-                    onPress={() => setModalVisible(true)}
-                    activeOpacity={0.85}
+                {/* Scrollable Content that covers the background */}
+                <ScrollView 
+                    style={styles.scrollView}
+                    contentContainerStyle={styles.scrollContent}
+                    showsVerticalScrollIndicator={false}
                 >
-                    <View style={styles.addButtonInner}>
-                        <Text style={styles.addButtonIcon}>✦</Text>
-                        <Text style={styles.addButtonText}>New Entry</Text>
-                    </View>
-                </TouchableOpacity>
+                    <View style={styles.topSpacer} />
+                    
+                    <View style={styles.contentCard}>
+                        <LinearGradient
+                            colors={[
+                                'rgba(15, 35, 54, 0)',
+                                'rgba(15, 35, 54, 0.3)',
+                                'rgba(15, 35, 54, 0.5)',
+                                'rgba(15, 35, 54, 0.7)',
+                                'rgba(15, 35, 54, 0.9)',
+                                'rgba(15, 35, 54, 0.91)',
+                                'rgba(15, 35, 54, 0.92)',
+                                'rgba(15, 35, 54, 0.93)',
+                                'rgba(15, 35, 54, 0.94)',
+                                'rgba(15, 35, 54, 0.95)',
+                                'rgba(15, 35, 54, 0.96)',
+                                'rgba(15, 35, 54, 0.97)',
+                                'rgba(15, 35, 54, 0.98)',
+                                'rgba(15, 35, 54, 0.99)',
+                                COLORS.tirtiaryBlueHex
+                            ]}
+                            locations={[0, 0.2, 0.4, 0.6, 0.75, 0.8, 0.84, 0.88, 0.91, 0.93, 0.95, 0.97, 0.98, 0.99, 1]}
+                            style={styles.contentGradient}
+                        >
+                            <View style={styles.headerContainer}>
+                                <Text style={styles.title}>✨ Dream Journal</Text>
+                            </View>
+                        </LinearGradient>
 
-                {entries.length === 0 ? (
-                    <View style={styles.emptyState}>
-                        <Text style={styles.emptyStateIcon}>💭</Text>
-                        <Text style={styles.emptyStateText}>
-                            No dreams recorded yet.{' '}Start capturing your dreams!
-                        </Text>
+                        <View style={styles.buttonSection}>
+                            <TouchableOpacity
+                                style={styles.addButton}
+                                onPress={() => setModalVisible(true)}
+                                activeOpacity={0.85}
+                            >
+                                <View style={styles.addButtonInner}>
+                                    <Text style={styles.addButtonIcon}>✦</Text>
+                                    <Text style={styles.addButtonText}>New Entry</Text>
+                                </View>
+                            </TouchableOpacity>
+                        </View>
+
+                        {entries.length === 0 ? (
+                            <View style={styles.emptyStateWrapper}>
+                                <View style={styles.emptyState}>
+                                    <Text style={styles.emptyStateIcon}>💭</Text>
+                                    <Text style={styles.emptyStateText}>
+                                        No dreams recorded yet.{' '}Start capturing your dreams!
+                                    </Text>
+                                </View>
+                            </View>
+                        ) : (
+                            <View style={styles.entriesContainer}>
+                                {entries.map((item) => (
+                                    <TouchableOpacity
+                                        key={item.id}
+                                        style={styles.entryCard}
+                                        onPress={() => setSelectedEntry(item)}
+                                        activeOpacity={0.7}
+                                    >
+                                        <View style={styles.orangeAccent} />
+                                        <View style={styles.cardContent}>
+                                            <View style={styles.dateContainer}>
+                                                <Text style={styles.entryDate}>🌙 {item.date}</Text>
+                                            </View>
+                                            <Text style={styles.entryTitle}>{item.title}</Text>
+                                            <Text style={styles.entryPreview} numberOfLines={2}>
+                                                {item.content}
+                                            </Text>
+                                        </View>
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+                        )}
                     </View>
-                ) : (
-                    <FlatList
-                        data={entries}
-                        keyExtractor={(item) => item.id}
-                        renderItem={renderEntryPreview}
-                        contentContainerStyle={styles.listContainer}
-                    />
-                )}
+                </ScrollView>
+            </View>
 
                 {/* New Entry Modal */}
                 <Modal
@@ -259,7 +335,6 @@ const JournalScreen = (props: any) => {
                         </View>
                     )}
                 </Modal>
-            </SafeAreaView>
         </>
     );
 };
@@ -269,6 +344,58 @@ export default JournalScreen;
 const styles = StyleSheet.create({
     screenContainer: {
         flex: 1,
+        backgroundColor: COLORS.tirtiaryBlueHex,
+    },
+    fixedBackground: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        height: '40%',
+        zIndex: 1,
+        marginTop: -50,
+        paddingTop: 50,
+    },
+    landscapeImage: {
+        width: '100%',
+        height: '100%',
+    },
+    gradientOverlay: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        height: '100%',
+    },
+    scrollView: {
+        flex: 1,
+        zIndex: 2,
+    },
+    scrollContent: {
+        flexGrow: 1,
+    },
+    topSpacer: {
+        height: 200,
+    },
+    contentCard: {
+        flex: 1,
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
+        overflow: 'hidden',
+        minHeight: '100%',
+    },
+    contentGradient: {
+        paddingTop: 40,
+        paddingBottom: 30,
+    },
+    buttonSection: {
+        backgroundColor: COLORS.tirtiaryBlueHex,
+        paddingTop: 0,
+        marginTop: -10,
+    },
+    entriesContainer: {
+        paddingHorizontal: 16,
+        paddingBottom: 16,
         backgroundColor: COLORS.tirtiaryBlueHex,
     },
     headerContainer: {
@@ -284,26 +411,6 @@ const styles = StyleSheet.create({
         fontWeight: '800',
         letterSpacing: -0.5,
         zIndex: 2,
-    },
-    decorativeCircle: {
-        position: 'absolute',
-        top: -20,
-        right: 20,
-        width: 80,
-        height: 80,
-        borderRadius: 40,
-        backgroundColor: COLORS.primaryOrangeHex,
-        opacity: 0.15,
-    },
-    decorativeCircle2: {
-        position: 'absolute',
-        top: 10,
-        right: -10,
-        width: 60,
-        height: 60,
-        borderRadius: 30,
-        backgroundColor: COLORS.primaryOrangeHex,
-        opacity: 0.06,
     },
     addButton: {
         marginHorizontal: 16,
@@ -335,6 +442,10 @@ const styles = StyleSheet.create({
         fontSize: 17,
         fontWeight: '700',
         letterSpacing: 0.3,
+    },
+    emptyStateWrapper: {
+        backgroundColor: COLORS.tirtiaryBlueHex,
+        flex: 1,
     },
     emptyState: {
         flex: 1,
