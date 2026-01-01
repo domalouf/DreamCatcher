@@ -89,25 +89,6 @@ const JournalScreen = (props: any) => {
         setSelectedEntry(null);
     };
 
-    const renderEntryPreview = ({ item }: { item: DreamEntry }) => (
-        <TouchableOpacity
-            style={styles.entryCard}
-            onPress={() => setSelectedEntry(item)}
-            activeOpacity={0.7}
-        >
-            <View style={styles.orangeAccent} />
-            <View style={styles.cardContent}>
-                <View style={styles.dateContainer}>
-                    <Text style={styles.entryDate}>🌙 {item.date}</Text>
-                </View>
-                <Text style={styles.entryTitle}>{item.title}</Text>
-                <Text style={styles.entryPreview} numberOfLines={2}>
-                    {item.content}
-                </Text>
-            </View>
-        </TouchableOpacity>
-    );
-
     return (
         <>
             <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
@@ -470,51 +451,54 @@ const styles = StyleSheet.create({
         paddingBottom: 16,
     },
     entryCard: {
-        backgroundColor: 'rgba(124, 212, 198, 0.12)',
-        borderRadius: 16,
-        marginBottom: 12,
+        backgroundColor: 'transparent',
+        borderRadius: 14,
+        marginBottom: 10,
         borderWidth: 1,
-        borderColor: 'rgba(124, 212, 198, 0.24)',
+        borderColor: 'rgba(124, 212, 198, 0.15)',
         overflow: 'hidden',
-        shadowColor: COLORS.primaryPurpleHex,
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 3,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.08,
+        shadowRadius: 3,
+        elevation: 2,
     },
     orangeAccent: {
         position: 'absolute',
         left: 0,
         top: 0,
         bottom: 0,
-        width: 4,
-        backgroundColor: COLORS.primaryPurpleHex,
+        width: 3,
+        backgroundColor: COLORS.primaryOrangeHex,
     },
     cardContent: {
-        padding: 16,
-        paddingLeft: 20,
+        padding: 14,
+        paddingLeft: 16,
+        backgroundColor: COLORS.secondaryBlueHex,
     },
     dateContainer: {
-        marginBottom: 6,
+        marginBottom: 8,
     },
     entryDate: {
         color: COLORS.primaryOrangeHex,
-        fontSize: 12,
-        fontWeight: '700',
-        letterSpacing: 0.5,
+        fontSize: 11,
+        fontWeight: '600',
+        letterSpacing: 0.4,
         textTransform: 'uppercase',
+        opacity: 0.85,
     },
     entryTitle: {
         color: COLORS.whiteHex,
-        fontSize: 18,
+        fontSize: 16,
         fontWeight: '700',
-        marginBottom: 10,
+        marginBottom: 8,
+        lineHeight: 22,
     },
     entryPreview: {
         color: COLORS.whiteHex,
-        fontSize: 14,
-        opacity: 0.75,
-        lineHeight: 20,
+        fontSize: 13,
+        opacity: 0.7,
+        lineHeight: 18,
     },
     modalOverlay: {
         flex: 1,
