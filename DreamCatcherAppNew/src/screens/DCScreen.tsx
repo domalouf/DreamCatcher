@@ -36,11 +36,11 @@ if (BleManagerModule && !BleManagerModule.removeListeners) {
 }
 
 const bleManagerEmitter = new NativeEventEmitter(BleManagerModule);
-const SECONDS_TO_SCAN_FOR = 1;
+const SECONDS_TO_SCAN_FOR = 8;
 // the only uuids we are interested in
-const SERVICE_UUIDS: string[] = ['7504e3b0-fd7a-4b56-b74d-c6e7eeed3f19'];
-//const SERVICE_UUIDS: string[] = [];
-const ALLOW_DUPLICATES = false;
+//const SERVICE_UUIDS: string[] = ['7504e3b0-fd7a-4b56-b74d-c6e7eeed3f19'];
+const SERVICE_UUIDS: string[] = [];  // temporarily empty to scan all devices
+const ALLOW_DUPLICATES = true;
 
 const DCScreen = ({ navigation }: { navigation: any }) => {
   const [isConnectPopupVisible, setIsConnectPopupVisible] = useState(false);
@@ -66,7 +66,7 @@ const DCScreen = ({ navigation }: { navigation: any }) => {
       setDiscoveredPeripherals(new Map<Peripheral['id'], Peripheral>());
 
       try {
-        console.debug('[startScan] starting scan...');
+        console.log('[startScan] starting scan...');
         setIsScanning(true);
         BleManager.scan({
           serviceUUIDs: SERVICE_UUIDS,
@@ -77,11 +77,17 @@ const DCScreen = ({ navigation }: { navigation: any }) => {
           callbackType: BleScanCallbackType.AllMatches,
         })
           .then(() => {
-            console.debug('[startScan] scan promise returned successfully.');
+            console.log('[startScan] scan promise returned successfully.');
           })
           .catch((err: any) => {
             console.error('[startScan] ble scan returned in error', err);
           });
+        
+        // Fallback timeout to ensure isScanning is reset
+        setTimeout(() => {
+          setIsScanning(false);
+          console.log('[startScan] scan timeout - resetting isScanning.');
+        }, (SECONDS_TO_SCAN_FOR + 1) * 1000);
       } catch (error) {
         console.error('[startScan] ble scan error thrown', error);
       }
@@ -91,13 +97,13 @@ const DCScreen = ({ navigation }: { navigation: any }) => {
   // just sets isScanning to false
   const handleStopScan = () => {
     setIsScanning(false);
-    console.debug('[handleStopScan] scan is stopped.');
+    console.log('[handleStopScan] scan is stopped.');
   };
 
   const handleDisconnectedPeripheral = (
     event: BleDisconnectPeripheralEvent,
   ) => {
-    console.debug(
+    console.log(
       `[handleDisconnectedPeripheral][${event.peripheral}] disconnected.`,
     );
     setConnectedPeripherals(map => {
@@ -112,12 +118,12 @@ const DCScreen = ({ navigation }: { navigation: any }) => {
   };
 
   const handleUpdateValueForCharacteristic = (data: BleManagerDidUpdateValueForCharacteristicEvent) => {
-    console.debug(
+    console.log(
       `[handleUpdateValueForCharacteristic] received data from '${data.peripheral}' with characteristic='${data.characteristic}' and value='${data.value}'`,);
   };
 
   const handleDiscoverPeripheral = (peripheral: Peripheral) => {
-    console.debug('[handleDiscoverPeripheral] new BLE peripheral=', peripheral);
+    console.log('[handleDiscoverPeripheral] new BLE peripheral=', peripheral);
     if (!peripheral.name) {
       peripheral.name = 'Spooky Mystery Device';
     }
@@ -150,7 +156,7 @@ const DCScreen = ({ navigation }: { navigation: any }) => {
         return;
       }
 
-      console.debug(
+      console.log(
         '[retrieveConnected] connectedPeripherals',
         connectedPeripherals,
       );
@@ -179,7 +185,7 @@ const DCScreen = ({ navigation }: { navigation: any }) => {
     try {
       if (peripheral) {
         await BleManager.connect(peripheral.id);
-        console.debug(`[connectPeripheral][${peripheral.id}] connected.`);
+        console.log(`[connectPeripheral][${peripheral.id}] connected.`);
 
         setConnectedPeripherals(map => {
           let p = discoveredPeripherals.get(peripheral.id);
@@ -196,13 +202,13 @@ const DCScreen = ({ navigation }: { navigation: any }) => {
 
         /* Test read current RSSI value, retrieve services first */
         const peripheralData = await BleManager.retrieveServices(peripheral.id);
-        console.debug(
+        console.log(
           `[connectPeripheral][${peripheral.id}] retrieved peripheral services`,
           peripheralData,
         );
 
         const rssi = await BleManager.readRSSI(peripheral.id);
-        console.debug(
+        console.log(
           `[connectPeripheral][${peripheral.id}] retrieved current RSSI value: ${rssi}.`,
         );
 
@@ -221,7 +227,7 @@ const DCScreen = ({ navigation }: { navigation: any }) => {
                     characteristic.characteristic,
                     descriptor.uuid,
                   );
-                  console.debug(
+                  console.log(
                     `[connectPeripheral][${peripheral.id}] ${characteristic.service} ${characteristic.characteristic} ${descriptor.uuid} descriptor read as:`,
                     data,
                   );
@@ -262,7 +268,7 @@ const DCScreen = ({ navigation }: { navigation: any }) => {
         return;
       }
 
-      console.debug(
+      console.log(
         '[readPeripheral] connectedPeripherals to scan for data',
         connectedPeripherals,
       );
@@ -297,7 +303,7 @@ const DCScreen = ({ navigation }: { navigation: any }) => {
         return;
       }
 
-      console.debug(
+      console.log(
         '[writePeripheral] connectedPeripherals to write data to',
         connectedPeripherals,
       );
@@ -344,7 +350,7 @@ const DCScreen = ({ navigation }: { navigation: any }) => {
   useEffect(() => {
     try {
       BleManager.start({ showAlert: false })
-        .then(() => console.debug('BleManager started.'))
+        .then(() => console.log('BleManager started.'))
         .catch((error: any) =>
           console.error('BeManager could not be started.', error),
         );
@@ -379,7 +385,7 @@ const DCScreen = ({ navigation }: { navigation: any }) => {
     handleAndroidPermissions();
 
     return () => {
-      console.debug('[app] main component unmounting. Removing listeners...');
+      console.log('[app] main component unmounting. Removing listeners...');
       for (const listener of listeners) {
         listener.remove();
       }
@@ -393,7 +399,7 @@ const DCScreen = ({ navigation }: { navigation: any }) => {
         PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
       ]).then(result => {
         if (result) {
-          console.debug(
+          console.log(
             '[handleAndroidPermissions] User accepts runtime permissions android 12+',
           );
         } else {
@@ -407,7 +413,7 @@ const DCScreen = ({ navigation }: { navigation: any }) => {
         PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
       ).then(checkResult => {
         if (checkResult) {
-          console.debug(
+          console.log(
             '[handleAndroidPermissions] runtime permission Android <12 already OK',
           );
         } else {
@@ -415,7 +421,7 @@ const DCScreen = ({ navigation }: { navigation: any }) => {
             PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
           ).then(requestResult => {
             if (requestResult) {
-              console.debug(
+              console.log(
                 '[handleAndroidPermissions] User accepts runtime permission android <12',
               );
             } else {
@@ -431,9 +437,9 @@ const DCScreen = ({ navigation }: { navigation: any }) => {
 
   const renderItem = ({ item }: { item: Peripheral }) => {
     const backgroundColor = connectedPeripherals.has(item.id) ? '#069400' : '#6e6ea0'; // green if connected, light blue if not
-    if (item.name === null || !item.name?.includes('ESP32')) {
-      //return null;
-    }
+    // if (item.name === null || !item.name?.includes('ESP32')) {
+    //   return null;
+    // }
 
     return (
       <TouchableHighlight

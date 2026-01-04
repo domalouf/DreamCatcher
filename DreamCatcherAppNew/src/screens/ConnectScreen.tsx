@@ -67,7 +67,7 @@ const ConnectScreen = ({ navigation }: { navigation: any }) => {
                 callbackType: BleScanCallbackType.AllMatches,
                 })
                     .then(() => {
-                        console.debug('[startScan] scan promise returned successfully.');
+                        console.log('[startScan] scan promise returned successfully.');
                     })
                     .catch((err: any) => {
                         console.error('[startScan] ble scan returned in error', err);
