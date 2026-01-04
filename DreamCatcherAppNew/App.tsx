@@ -5,6 +5,8 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import Icon from '@react-native-vector-icons/fontawesome';
 import { BlurView } from '@react-native-community/blur';
+import { useSafeAreaInsets, SafeAreaProvider } from 'react-native-safe-area-context';
+import SystemNavigationBar from 'react-native-system-navigation-bar';
 import { COLORS } from './src/theme/theme';
 
 import JournalScreen from './src/screens/JournalScreen';
@@ -18,6 +20,8 @@ const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
 
 function BottomNavBarTabs() {
+  const insets = useSafeAreaInsets();
+  
   return (
     <Tab.Navigator
       initialRouteName="Journal"
@@ -25,7 +29,7 @@ function BottomNavBarTabs() {
         tabBarActiveTintColor: COLORS.primaryBlueHex,
         tabBarInactiveTintColor: COLORS.primaryGrayHex,
         headerShown: false,
-        tabBarStyle: styles.tabBarStyle,
+        tabBarStyle: [styles.tabBarStyle, { marginBottom: insets.bottom }],
         tabBarBackground: () => (
           <BlurView overlayColor='transparent' blurAmount={1}
             style={styles.BlurViewStyle} />
@@ -144,10 +148,27 @@ function ProfileStack() {
 }
 
 export default function App() {
+  React.useEffect(() => {
+    // Enable immersive mode to hide the navigation bar
+    SystemNavigationBar.immersive().catch(() => {
+      // Fallback if immersive fails
+    });
+
+    // Set up a timer to hide the nav bar again after 3 seconds
+    // This handles the case where the user swipes it up
+    const interval = setInterval(() => {
+      SystemNavigationBar.immersive().catch(() => {});
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, []);
+
   return (
-    <NavigationContainer>
-      <BottomNavBarTabs />
-    </NavigationContainer>
+    <SafeAreaProvider>
+      <NavigationContainer>
+        <BottomNavBarTabs />
+      </NavigationContainer>
+    </SafeAreaProvider>
   );
 }
 
@@ -155,6 +176,9 @@ const styles = StyleSheet.create({
   tabBarStyle: {
     height: 60,
     position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
     elevation: 0,
     borderTopColor: 'transparent',
   },
