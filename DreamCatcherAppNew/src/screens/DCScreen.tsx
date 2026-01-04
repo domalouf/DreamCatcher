@@ -7,9 +7,7 @@ import { differenceInMilliseconds } from 'date-fns';
 import {
   Platform,
   ScrollView,
-  Dimensions,
   NativeModules,
-  useColorScheme,
   TouchableOpacity,
   NativeEventEmitter,
   PermissionsAndroid,
