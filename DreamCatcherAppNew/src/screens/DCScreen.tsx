@@ -60,6 +60,7 @@ const DCScreen = ({ navigation }: { navigation: any }) => {
   const [endTimePopOpen, setEndTimePopOpen] = useState(false);
 
   const startScan = () => {
+    console.log('[startScan] called.');
     if (!isScanning) {
       // reset found peripherals before scan
       setDiscoveredPeripherals(new Map<Peripheral['id'], Peripheral>());
@@ -571,9 +572,9 @@ const DCScreen = ({ navigation }: { navigation: any }) => {
                 Mask is not asleep for certain?</Text>}
 
 
-            <Image source={require('../../src/images/mask.png')}
+            {/* <Image source={require('../../src/images/mask.png')}
               resizeMode='contain'
-              style={styles.maskImage} />
+              style={styles.maskImage} /> */}
 
             <View style={styles.onOffContainer}>
               <TouchableOpacity onPress={() => writePeripheral('light: off')} style={styles.scanButton}>

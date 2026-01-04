@@ -50,6 +50,7 @@ const ConnectScreen = ({ navigation }: { navigation: any }) => {
     );
 
     const startScan = () => {
+        console.debug('[startScan] called.');
         if (!isScanning) {
             // reset found peripherals before scan
             setDiscoveredPeripherals(new Map<Peripheral['id'], Peripheral>());
