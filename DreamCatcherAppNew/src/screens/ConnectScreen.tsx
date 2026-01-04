@@ -36,9 +36,9 @@ if (BleManagerModule && !BleManagerModule.removeListeners) {
 const bleManagerEmitter = new NativeEventEmitter(BleManagerModule);
 const SECONDS_TO_SCAN_FOR = 8;
 // the only uuids we are interested in
-//const SERVICE_UUIDS: string[] = ['7504e3b0-fd7a-4b56-b74d-c6e7eeed3f19'];
-const SERVICE_UUIDS: string[] = [];  // temporarily empty to scan all devices
-const ALLOW_DUPLICATES = true;
+const SERVICE_UUIDS: string[] = ['7504e3b0-fd7a-4b56-b74d-c6e7eeed3f19'];
+//const SERVICE_UUIDS: string[] = [];  // temporarily empty to scan all devices
+const ALLOW_DUPLICATES = false;
 
 const ConnectScreen = ({ navigation }: { navigation: any }) => {
     const [isScanning, setIsScanning] = useState(false);
@@ -232,27 +232,14 @@ const ConnectScreen = ({ navigation }: { navigation: any }) => {
             return;
         }
 
-        const listeners = [
-            bleManagerEmitter.addListener(
-                'BleManagerDiscoverPeripheral',
-                handleDiscoverPeripheral,
+        const listeners: any[] = [
+            BleManager.onDiscoverPeripheral(handleDiscoverPeripheral),
+            BleManager.onStopScan(handleStopScan),
+            BleManager.onConnectPeripheral(handleConnectPeripheral),
+            BleManager.onDidUpdateValueForCharacteristic(
+                handleUpdateValueForCharacteristic
             ),
-            bleManagerEmitter.addListener(
-                'BleManagerStopScan',
-                handleStopScan
-            ),
-            bleManagerEmitter.addListener(
-                'BleManagerDisconnectPeripheral',
-                handleDisconnectedPeripheral,
-            ),
-            bleManagerEmitter.addListener(
-                'BleManagerDidUpdateValueForCharacteristic',
-                handleUpdateValueForCharacteristic,
-            ),
-            bleManagerEmitter.addListener(
-                'BleManagerConnectPeripheral',
-                handleConnectPeripheral,
-            ),
+            BleManager.onDisconnectPeripheral(handleDisconnectedPeripheral),
         ];
 
         handleAndroidPermissions();
