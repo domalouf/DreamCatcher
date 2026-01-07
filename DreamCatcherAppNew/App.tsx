@@ -10,7 +10,6 @@ import SystemNavigationBar from 'react-native-system-navigation-bar';
 import { COLORS } from './src/theme/theme';
 
 import JournalScreen from './src/screens/JournalScreen';
-import DCScreen from './src/screens/DCScreen';
 import LearnScreen from './src/screens/LearnScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
@@ -24,7 +23,7 @@ function BottomNavBarTabs() {
   
   return (
     <Tab.Navigator
-      initialRouteName="Journal"
+      initialRouteName="DC"
       screenOptions={{
         tabBarActiveTintColor: COLORS.primaryBlueHex,
         tabBarInactiveTintColor: COLORS.primaryGrayHex,
@@ -105,18 +104,6 @@ function DCStack() {
           animation: 'slide_from_bottom',
         }}
         component={ConnectScreen} />
-      <Stack.Screen name="DC Home"
-        options={{
-          headerShown: false,
-          animation: 'slide_from_bottom',
-        }}
-        component={DCScreen} />
-      <Stack.Screen name="Settings"
-        options={{
-          headerShown: true,
-          animation: 'slide_from_bottom',
-        }}
-        component={SettingsScreen} />
     </Stack.Navigator>
   );
 }
@@ -143,6 +130,12 @@ function ProfileStack() {
           animation: 'slide_from_bottom',
         }}
         component={ProfileScreen} />
+        <Stack.Screen name="Settings"
+        options={{
+          headerShown: true,
+          animation: 'slide_from_bottom',
+        }}
+        component={SettingsScreen} />
     </Stack.Navigator>
   );
 }

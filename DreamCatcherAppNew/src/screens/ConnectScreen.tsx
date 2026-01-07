@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { View, StatusBar, Text, StyleSheet, ImageBackground, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { differenceInMilliseconds } from 'date-fns';
 // stuff for ble
 import {
     Platform,
@@ -34,7 +36,7 @@ if (BleManagerModule && !BleManagerModule.removeListeners) {
 }
 
 const bleManagerEmitter = new NativeEventEmitter(BleManagerModule);
-const SECONDS_TO_SCAN_FOR = 8;
+const SECONDS_TO_SCAN_FOR = 3;
 // the only uuids we are interested in
 const SERVICE_UUIDS: string[] = ['7504e3b0-fd7a-4b56-b74d-c6e7eeed3f19'];
 //const SERVICE_UUIDS: string[] = [];  // temporarily empty to scan all devices
@@ -48,6 +50,13 @@ const ConnectScreen = ({ navigation }: { navigation: any }) => {
     const [discoveredPeripherals, setDiscoveredPeripherals] = useState(
         new Map<Peripheral['id'], Peripheral>(),
     );
+    const [peripheralReadData, setPeripheralReadData] = useState('No Data Yet');
+    const [isMaskSleep, setIsMaskSleep] = useState(false);
+    
+    const [startTimeWindow, setStartTimeWindow] = useState(new Date());
+    const [endTimeWindow, setEndTimeWindow] = useState(new Date());
+    const [startTimePopOpen, setStartTimePopOpen] = useState(false);
+    const [endTimePopOpen, setEndTimePopOpen] = useState(false);
 
     const startScan = () => {
         console.log('[startScan] called.');
@@ -152,8 +161,22 @@ const ConnectScreen = ({ navigation }: { navigation: any }) => {
                     return map;
                 });
 
+                setIsMaskSleep(false);
+
                 // before retrieving services, it is often a good idea to let bonding & connection finish properly
-                await sleep(900);
+                await sleep(1500);
+
+                // Check if still connected before proceeding
+                const isConnected = await BleManager.isPeripheralConnected(peripheral.id, []);
+                if (!isConnected) {
+                    console.warn(`[connectPeripheral][${peripheral.id}] device disconnected before service retrieval`);
+                    setConnectedPeripherals(map => {
+                        const newMap = new Map(map);
+                        newMap.delete(peripheral.id);
+                        return newMap;
+                    });
+                    return;
+                }
 
                 /* Test read current RSSI value, retrieve services first */
                 const peripheralData = await BleManager.retrieveServices(peripheral.id);
@@ -211,7 +234,106 @@ const ConnectScreen = ({ navigation }: { navigation: any }) => {
                 `[connectPeripheral][${peripheral.id}] connectPeripheral error`,
                 error,
             );
+            // Remove from connected peripherals on error
+            setConnectedPeripherals(map => {
+                const newMap = new Map(map);
+                newMap.delete(peripheral.id);
+                return newMap;
+            });
         }
+    };
+
+    const readPeripheral = async () => {
+        try {
+            if (connectedPeripherals.size === 0) {
+                console.warn('[readPeripheral] No connected peripherals found.');
+                setPeripheralReadData('Not Connected to a peripheral');
+                return;
+            }
+
+            console.log(
+                '[readPeripheral] connectedPeripherals to scan for data',
+                Array.from(connectedPeripherals.values()),
+            );
+
+            for (const peripheral of connectedPeripherals.values()) {
+                // Now you are connected to the peripheral, and you have its services and characteristics.
+                // You can read a characteristic like this:
+                let service = 'dff3db14-65be-4e80-9852-0bbff6037651'; // replace with your service UUID
+                let characteristic = '80eb899b-b325-4120-b604-df06ec01af12'; // replace with your characteristic UUID
+                BleManager.read(peripheral.id, service, characteristic)
+                    .then(data => {
+                        // Success code
+                        console.log('Read:', data);
+                        setPeripheralReadData(data.toString());
+                    })
+                    .catch(error => {
+                        // Failure code
+                        console.log(error);
+                    });
+            }
+        } catch (error) {
+            console.error('[readPeripheral] unable to read peripheral data.', error);
+        }
+    };
+
+    const writePeripheral = async (writeData: string) => {
+        try {
+            if (connectedPeripherals.size === 0) {
+                console.warn('[writePeripheral] No connected peripherals found.');
+                return;
+            }
+
+            console.log(
+                '[writePeripheral] connectedPeripherals to write data to',
+                Array.from(connectedPeripherals.values()),
+            );
+
+            let asciiArray = [];
+
+            for (let i = 0; i < writeData.length; i++) {
+                asciiArray.push(writeData.charCodeAt(i));
+            }
+
+            for (const peripheral of connectedPeripherals.values()) {
+                // Now you are connected to the peripheral, and you have its services and characteristics.
+                // You can read a characteristic like this:
+                let service = '7504e3b0-fd7a-4b56-b74d-c6e7eeed3f19'; // replace with your service UUID
+                let characteristic = '8b38e5b5-2b9a-4954-9281-fcab195b0912'; // replace with your characteristic UUID
+                BleManager.write(
+                    peripheral.id,
+                    service,
+                    characteristic,
+                    asciiArray,
+                )
+                    .then(() => {
+                        console.log("Wrote " + writeData + " to characteristic " + characteristic);
+                    })
+                    .catch(error => {
+                        console.error(
+                            'Failed to write data to characteristic ' + characteristic,
+                            error,
+                        );
+                    });
+            }
+        } catch (error) {
+            console.error('[writePeripheral] unable to write peripheral data.', error);
+        }
+    };
+
+    // sends esp32 a set of strings that represent the time window
+    // startTime: [time in seconds]
+    // scanTime: [time in seconds]
+    // startTime is the number of seconds to sleep right now before checking for REM
+    // scanTime is the number of seconds to check for REM
+    const sendTimeInfo = () => {
+        var startTime = (differenceInMilliseconds(startTimeWindow, new Date()) / 1000).toString();
+        writePeripheral("startTime: " + parseInt(startTime));
+
+        var scanTime = (differenceInMilliseconds(endTimeWindow, startTimeWindow) / 1000).toString();
+        writePeripheral("scanTime: " + scanTime);
+
+        setIsMaskSleep(true);
     };
 
     // How you can tap? Go sleep. Go sleep.
@@ -348,14 +470,52 @@ const ConnectScreen = ({ navigation }: { navigation: any }) => {
         );
     };
 
+    const StartTimePopUp = () => {
+        return startTimePopOpen ? (
+            <DateTimePicker
+                value={startTimeWindow}
+                mode="time"
+                display="spinner"
+                onChange={(event, selectedDate) => {
+                    if (event.type === 'set' && selectedDate) {
+                        setStartTimeWindow(selectedDate);
+                        setStartTimePopOpen(false);
+                    } else {
+                        setStartTimePopOpen(false);
+                    }
+                }}
+            />
+        ) : null;
+    };
+
+    const EndTimePopUp = () => {
+        return endTimePopOpen ? (
+            <DateTimePicker
+                value={endTimeWindow}
+                mode="time"
+                display="spinner"
+                onChange={(event, selectedDate) => {
+                    if (event.type === 'set' && selectedDate) {
+                        setEndTimeWindow(selectedDate);
+                        setEndTimePopOpen(false);
+                    } else {
+                        setEndTimePopOpen(false);
+                    }
+                }}
+            />
+        ) : null;
+    };
+
     return (
         <>
             <StatusBar barStyle="default" />
             <SafeAreaView style={styles.screenContainer} edges={['top', 'left', 'right']}>
+                <StartTimePopUp />
+                <EndTimePopUp />
                 <ImageBackground source={require('../../src/images/starBackground.png')}
                     style={styles.bgImage}>
 
-                    <Text style={styles.title}>Connect to Dream Catcher Mask</Text>
+                    <Text style={styles.title}>Dream Catcher</Text>
 
                     <View>
                         <TouchableOpacity onPress={startScan} style={styles.scanButton}>
@@ -365,20 +525,82 @@ const ConnectScreen = ({ navigation }: { navigation: any }) => {
                         </TouchableOpacity>
                     </View>
 
-                    <ScrollView>
-                        {Array.from(discoveredPeripherals.values()).map((item) => (
+                    <ScrollView 
+                        style={styles.scrollContainer}
+                        contentContainerStyle={styles.scrollContent}
+                        showsVerticalScrollIndicator={true}>
+                        {Array.from(connectedPeripherals.values()).length === 0 ? (
+                            <Text style={styles.statusText}>Not Connected</Text>
+                        ) : (
+                            <Text style={styles.statusText}>Connected</Text>
+                        )}
+
+                        {Array.from(
+                            new Map([...discoveredPeripherals, ...connectedPeripherals]).values()
+                        ).map((item) => (
                             <View key={item.id}>{renderItem({ item })}</View>
                         ))}
-                        {Array.from(connectedPeripherals.values()).map((item) => (
-                            <View key={item.id}>{renderItem({ item })}</View>
-                        ))}
+
+                        {Array.from(connectedPeripherals.values()).length > 0 && (
+                            <>
+                                {isMaskSleep ? (
+                                    <Text style={styles.statusText}>Mask is Asleep</Text>
+                                ) : (
+                                    <Text style={styles.statusText}>Mask is Awake</Text>
+                                )}
+
+                                <View style={styles.controlsContainer}>
+                                    <Text style={styles.sectionTitle}>LED Controls</Text>
+                                    <View style={styles.buttonRow}>
+                                        <TouchableOpacity
+                                            onPress={() => writePeripheral('light: off')}
+                                            style={[styles.controlButton, styles.buttonSmall]}>
+                                            <Text style={styles.scanButtonText}>Turn Off LED</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                            onPress={() => writePeripheral('light: on')}
+                                            style={[styles.controlButton, styles.buttonSmall]}>
+                                            <Text style={styles.scanButtonText}>Turn On LED</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                    <TouchableOpacity
+                                        onPress={() => writePeripheral('trick: yes')}
+                                        style={styles.controlButton}>
+                                        <Text style={styles.scanButtonText}>Do a Trick</Text>
+                                    </TouchableOpacity>
+
+                                    <Text style={styles.sectionTitle}>Time Window</Text>
+                                    <View style={styles.timeContainer}>
+                                        <TouchableOpacity
+                                            onPress={() => setStartTimePopOpen(true)}
+                                            style={styles.controlButton}>
+                                            <Text style={styles.scanButtonText}>Set Start Time</Text>
+                                        </TouchableOpacity>
+                                        <Text style={styles.timeText}>
+                                            {startTimeWindow.toLocaleTimeString()}
+                                        </Text>
+                                    </View>
+
+                                    <View style={styles.timeContainer}>
+                                        <TouchableOpacity
+                                            onPress={() => setEndTimePopOpen(true)}
+                                            style={styles.controlButton}>
+                                            <Text style={styles.scanButtonText}>Set End Time</Text>
+                                        </TouchableOpacity>
+                                        <Text style={styles.timeText}>
+                                            {endTimeWindow.toLocaleTimeString()}
+                                        </Text>
+                                    </View>
+
+                                    <TouchableOpacity
+                                        onPress={() => sendTimeInfo()}
+                                        style={styles.submitButton}>
+                                        <Text style={styles.scanButtonText}>Submit Time Window</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </>
+                        )}
                     </ScrollView>
-
-                    <TouchableOpacity onPress={() => navigation.navigate('DC Home')}
-                        style={styles.secretButton}>
-                        <Text>Super Sneaky Button</Text>
-                    </TouchableOpacity>
-
                 </ImageBackground>
             </SafeAreaView>
         </>
@@ -393,14 +615,36 @@ const styles = StyleSheet.create({
         backgroundColor: COLORS.tirtiaryBlueHex,
     },
     title: {
-        fontSize: 20,
+        fontSize: 30,
         color: COLORS.whiteHex,
         fontWeight: 'bold',
         textAlign: 'center',
+        marginTop: 10,
+        marginBottom: 10,
     },
     bgImage: {
         flex: 1,
         resizeMode: 'cover',
+    },
+    scrollContainer: {
+        flex: 1,
+    },
+    scrollContent: {
+        paddingBottom: 120,
+    },
+    statusText: {
+        fontSize: 18,
+        color: COLORS.whiteHex,
+        textAlign: 'center',
+        marginVertical: 10,
+    },
+    sectionTitle: {
+        fontSize: 20,
+        color: COLORS.whiteHex,
+        fontWeight: 'bold',
+        textAlign: 'center',
+        marginTop: 20,
+        marginBottom: 10,
     },
     scanButton: {
         backgroundColor: COLORS.whiteHex,
@@ -411,6 +655,44 @@ const styles = StyleSheet.create({
     },
     scanButtonText: {
         fontSize: 16,
+        textAlign: 'center',
+    },
+    controlsContainer: {
+        marginTop: 20,
+        paddingHorizontal: 10,
+    },
+    controlButton: {
+        backgroundColor: COLORS.primaryPurpleHex,
+        padding: 15,
+        borderRadius: 10,
+        margin: 10,
+        alignItems: 'center',
+    },
+    buttonRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+    },
+    buttonSmall: {
+        flex: 1,
+        marginHorizontal: 5,
+    },
+    timeContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginVertical: 5,
+    },
+    timeText: {
+        fontSize: 18,
+        color: COLORS.whiteHex,
+        marginRight: 20,
+    },
+    submitButton: {
+        backgroundColor: '#069400',
+        padding: 15,
+        borderRadius: 10,
+        margin: 10,
+        alignItems: 'center',
     },
     secretButton: {
         backgroundColor: COLORS.whiteHex,
@@ -444,6 +726,13 @@ const styles = StyleSheet.create({
         marginLeft: 10,
         marginRight: 10,
         borderRadius: 20,
-        //...boxShadow, // this does something... idk what
+        shadowColor: '#000',
+        shadowOffset: {
+            width: 2,
+            height: 2,
+        },
+        shadowOpacity: 0.25,
+        shadowRadius: 3.84,
+        elevation: 5,
     },
 });

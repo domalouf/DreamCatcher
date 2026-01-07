@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from '@react-native-vector-icons/fontawesome';
 import { COLORS } from '../theme/theme';
 
-const ProfileScreen = () => {
+const ProfileScreen = ({ navigation }: { navigation: any }) => {
     const [isEditing, setIsEditing] = useState(false);
     const [profile, setProfile] = useState({
         name: 'Dream Explorer',
@@ -44,16 +44,28 @@ const ProfileScreen = () => {
                     {/* Header with Edit Button */}
                     <View style={styles.headerContainer}>
                         <Text style={styles.title}>Profile</Text>
-                        <TouchableOpacity 
-                            onPress={isEditing ? handleSave : handleEdit}
-                            style={styles.editButton}
-                        >
-                            <Icon 
-                                name={isEditing ? 'check' : 'pencil'} 
-                                size={20} 
-                                color={COLORS.whiteHex} 
-                            />
-                        </TouchableOpacity>
+                        <View style={styles.headerButtons}>
+                            <TouchableOpacity 
+                                onPress={() => navigation.navigate('Settings')}
+                                style={styles.settingsButton}
+                            >
+                                <Icon 
+                                    name="cog" 
+                                    size={20} 
+                                    color={COLORS.whiteHex} 
+                                />
+                            </TouchableOpacity>
+                            <TouchableOpacity 
+                                onPress={isEditing ? handleSave : handleEdit}
+                                style={styles.editButton}
+                            >
+                                <Icon 
+                                    name={isEditing ? 'check' : 'pencil'} 
+                                    size={20} 
+                                    color={COLORS.whiteHex} 
+                                />
+                            </TouchableOpacity>
+                        </View>
                     </View>
 
                     {/* Profile Avatar Section */}
@@ -179,6 +191,20 @@ const styles = StyleSheet.create({
         color: COLORS.whiteHex,
         fontWeight: '800',
         letterSpacing: -0.5,
+    },
+    headerButtons: {
+        flexDirection: 'row',
+        gap: 10,
+    },
+    settingsButton: {
+        padding: 10,
+        backgroundColor: COLORS.primaryPurpleHex,
+        borderRadius: 12,
+        shadowColor: COLORS.primaryPurpleHex,
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.25,
+        shadowRadius: 6,
+        elevation: 4,
     },
     editButton: {
         padding: 10,

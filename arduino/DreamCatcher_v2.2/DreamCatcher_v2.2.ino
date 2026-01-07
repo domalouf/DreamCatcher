@@ -1,6 +1,11 @@
 /*
-  Dream Catcher - Fixed & Working Version
-  Keeps your original logic and features
+  Program Functionality:
+  1. Creates a ble server that receives a connection and only reads data
+  2. The data received will be the time left until the dream window,
+  3. The esp32 goes into deep sleep and wakes up at start of dream window,
+  4. During dream window, the esp32 sleeps for a set time, then blinks leds,
+  5. After dream window, the esp32 sleeps until next dream window (24 hours),
+  6. When reset, esp32 has option to connect to a phone and receive ble data
 */
 
 #include <BLEDevice.h>
@@ -54,6 +59,7 @@ void goToSleep(int length) {
 // Print wakeup reason
 void print_wakeup_reason() {
   esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
+
   switch (wakeup_reason) {
     case ESP_SLEEP_WAKEUP_TIMER:    Serial.println("Wakeup caused by timer"); break;
     case ESP_SLEEP_WAKEUP_EXT0:     Serial.println("Wakeup caused by external signal using RTC_IO"); break;
@@ -187,19 +193,19 @@ void setup() {
   Serial.println(bootCount);
   print_wakeup_reason();
 
-  // If we woke from timer and weren't already in dream mode → enter dream mode
+  // If we woke from timer and weren't already in dream mode -> enter dream mode
   if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER && !dreamTime) {
     dreamTime = true;
     blinkLED(5, 300);
     goToSleep(blinkInterval);
   }
-  // If already in dream mode → continue blinking cycle
+  // If already in dream mode -> continue blinking cycle
   else if (dreamTime) {
     blinkLED(5, 300);
     goToSleep(blinkInterval);
   }
 
-  // Otherwise: normal boot → start BLE for configuration
+  // Otherwise: normal boot -> start BLE for configuration
   startBLE();
 }
 
