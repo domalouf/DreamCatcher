@@ -193,7 +193,8 @@ void setup() {
   Serial.println(bootCount);
   print_wakeup_reason();
 
-  // If we woke from timer and weren't already in dream mode -> enter dream mode
+
+  // If wakeup was from a timer and the mask isn't in dream mode -> enter dream mode
   if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER && !dreamTime) {
     dreamTime = true;
     blinkLED(5, 300);
@@ -209,7 +210,9 @@ void setup() {
   startBLE();
 }
 
+// if the mask is in the loop, then it is waiting for instructions on when to sleep
 void loop() {
+
   // If we have received both values → start the long sleep to dream window
   if (dreamWindow > 0 && firstSleepTime > 0 && !dreamTime) {
     delay(1000); // give time to disconnect if needed
