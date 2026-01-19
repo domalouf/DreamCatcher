@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, StatusBar, Text, StyleSheet, ImageBackground, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -423,7 +423,7 @@ const ConnectScreen = ({ navigation }: { navigation: any }) => {
                 listener.remove();
             }
         };
-    }, []);
+    }, [isCollectingQTR]);
 
     const handleAndroidPermissions = () => {
         if (Platform.OS === 'android' && Platform.Version >= 31) {
