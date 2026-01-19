@@ -569,6 +569,20 @@ const ConnectScreen = ({ navigation }: { navigation: any }) => {
                                         <Text style={styles.scanButtonText}>Do a Trick</Text>
                                     </TouchableOpacity>
 
+                                    <Text style={styles.sectionTitle}>QTR Sensor Controls</Text>
+                                    <View style={styles.buttonRow}>
+                                        <TouchableOpacity
+                                            onPress={() => writePeripheral('qtr: calibrate')}
+                                            style={[styles.controlButton, styles.buttonSmall]}>
+                                            <Text style={styles.scanButtonText}>QTR Calibrate</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                            onPress={() => writePeripheral('qtr: collect')}
+                                            style={[styles.controlButton, styles.buttonSmall]}>
+                                            <Text style={styles.scanButtonText}>QTR Collect</Text>
+                                        </TouchableOpacity>
+                                    </View>
+
                                     <Text style={styles.sectionTitle}>Time Window</Text>
                                     <View style={styles.timeContainer}>
                                         <TouchableOpacity

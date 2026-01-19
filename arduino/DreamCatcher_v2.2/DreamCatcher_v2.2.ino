@@ -12,6 +12,7 @@
 #include <BLEServer.h>
 #include <BLEUtils.h>
 #include <BLE2902.h>
+#include <QTRSensors.h>
 
 RTC_DATA_ATTR int bootCount = 0;
 
@@ -19,6 +20,20 @@ RTC_DATA_ATTR int bootCount = 0;
 const int buttonPin = 33;           // Not used for wakeup, but kept for future
 const int LED_PIN = 2;              // Built-in LED
 const int LED_PIN26 = 26;           // External LED
+const int QTR_POWER_PIN = 27;       // QTR sensor power pin
+const int QTR_INPUT_PIN = 32;       // QTR sensor input pin
+
+// QTR Sensor setup
+QTRSensors qtr;
+const uint8_t SensorCount = 1;
+uint16_t sensorValues[SensorCount];
+
+// Define arrays to store QTR data (max 150 points)
+const int MAX_SAMPLES = 150;
+unsigned long timestamps[MAX_SAMPLES];
+uint16_t values[MAX_SAMPLES];
+int sampleCount = 0;
+bool qtrDataCollectionMode = false;
 
 // BLE
 BLEServer* pServer = nullptr;
@@ -98,6 +113,12 @@ void checkInput(String value) {
   }
   else if (value == "trick: yes") {
     doTrick();
+  }
+  else if (value == "qtr: calibrate") {
+    initializeQTR();
+  }
+  else if (value == "qtr: collect") {
+    qtrDataCollectionMode = true;
   }
   else if (value.startsWith("startTime:")) {
     String numStr = value.substring(10);
@@ -183,6 +204,68 @@ void blinkLED(int count, int delayTime) {
   }
 }
 
+// Initialize QTR sensor
+void initializeQTR() {
+  pinMode(QTR_POWER_PIN, OUTPUT);
+  digitalWrite(QTR_POWER_PIN, HIGH);
+  
+  qtr.setTypeAnalog();
+  qtr.setSensorPins((const uint8_t[]){QTR_INPUT_PIN}, SensorCount);
+  
+  delay(500);
+  digitalWrite(LED_PIN, HIGH); // Indicate calibration mode
+  
+  Serial.println("Starting QTR calibration...");
+  
+  // Calibration
+  for (uint16_t i = 0; i < 100; i++) {
+    qtr.calibrate();
+  }
+  digitalWrite(LED_PIN, LOW);
+  
+  // Print calibration values
+  for (uint8_t i = 0; i < SensorCount; i++) {
+    Serial.print("QTR minimum value: ");
+    Serial.println(qtr.calibrationOn.minimum[i]);
+  }
+  
+  for (uint8_t i = 0; i < SensorCount; i++) {
+    Serial.print("QTR maximum value: ");
+    Serial.println(qtr.calibrationOn.maximum[i]);
+  }
+  
+  Serial.println("QTR calibration complete.");
+}
+
+// Collect QTR sensor data for 10 seconds
+void collectQTRData() {
+  Serial.println("Starting 10-second QTR data collection...");
+  sampleCount = 0;
+  
+  unsigned long startTime = millis();
+  while (millis() - startTime < 10000 && sampleCount < MAX_SAMPLES) {
+    qtr.read(sensorValues);
+    
+    timestamps[sampleCount] = millis() - startTime;
+    values[sampleCount] = sensorValues[0];
+    sampleCount++;
+    
+    delay(100); // Sample every 100ms
+  }
+  
+  Serial.println("Data collection complete. Outputting data...");
+  
+  // Output all collected data
+  for (int i = 0; i < sampleCount; i++) {
+    Serial.print(timestamps[i]);
+    Serial.print(",");
+    Serial.println(values[i]);
+  }
+  
+  Serial.println("Data output complete.");
+  digitalWrite(QTR_POWER_PIN, LOW); // Turn off sensor
+}
+
 void setup() {
   Serial.begin(115200);
   pinMode(LED_PIN, OUTPUT);
@@ -212,6 +295,11 @@ void setup() {
 
 // if the mask is in the loop, then it is waiting for instructions on when to sleep
 void loop() {
+  // Handle QTR data collection if requested
+  if (qtrDataCollectionMode) {
+    collectQTRData();
+    qtrDataCollectionMode = false;
+  }
 
   // If we have received both values → start the long sleep to dream window
   if (dreamWindow > 0 && firstSleepTime > 0 && !dreamTime) {
