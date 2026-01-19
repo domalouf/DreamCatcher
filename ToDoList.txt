@@ -1,7 +1,5 @@
 TODO list
 
-Get a 30 second plot of data from the IR sensor
-
 Connect the IR sensor on the mask and show on the app with a real time display
 
 Show storage on the esp32

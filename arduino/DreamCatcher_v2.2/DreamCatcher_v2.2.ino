@@ -247,37 +247,34 @@ void initializeQTR() {
   Serial.println("QTR calibration complete.");
 }
 
-// Collect QTR sensor data for 10 seconds
+// Collect QTR sensor data for 10 seconds (sending in real-time)
 void collectQTRData() {
-  Serial.println("Starting 10-second QTR data collection...");
+  Serial.println("Starting 10-second QTR data collection (real-time mode)...");
   sampleCount = 0;
   
   unsigned long startTime = millis();
   while (millis() - startTime < 10000 && sampleCount < MAX_SAMPLES) {
     qtr.read(sensorValues);
     
-    timestamps[sampleCount] = millis() - startTime;
-    values[sampleCount] = sensorValues[0];
-    sampleCount++;
+    unsigned long currentTime = millis() - startTime;
+    uint16_t sensorValue = sensorValues[0];
     
-    delay(100); // Sample every 100ms
-  }
-  
-  Serial.println("Data collection complete. Sending data via BLE...");
-  
-  // Send all collected data via BLE as a formatted string
-  for (int i = 0; i < sampleCount; i++) {
-    String dataPoint = String(timestamps[i]) + "," + String(values[i]);
+    // Send data in real-time
+    String dataPoint = String(currentTime) + "," + String(sensorValue);
     pCharacteristic->setValue(dataPoint);
     pCharacteristic->notify();
-    delay(50); // Small delay between notifications
+    
+    Serial.println("Sent: " + dataPoint);
+    
+    delay(100); // Sample every 100ms
+    sampleCount++;
   }
   
   // Send completion signal
   pCharacteristic->setValue("QTR_DATA_END");
   pCharacteristic->notify();
   
-  Serial.println("Data transmission complete.");
+  Serial.println("Data collection complete. Sent " + String(sampleCount) + " data points.");
   digitalWrite(QTR_POWER_PIN, LOW); // Turn off sensor
 }
 
