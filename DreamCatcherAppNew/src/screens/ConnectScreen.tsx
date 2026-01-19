@@ -22,6 +22,7 @@ import BleManager, {
     BleScanMode,
     Peripheral,
 } from 'react-native-ble-manager';
+import { LineChart } from 'react-native-chart-kit';
 
 import { COLORS } from '../theme/theme';
 
@@ -39,6 +40,8 @@ const bleManagerEmitter = new NativeEventEmitter(BleManagerModule);
 const SECONDS_TO_SCAN_FOR = 3;
 // the only uuids we are interested in
 const SERVICE_UUIDS: string[] = ['7504e3b0-fd7a-4b56-b74d-c6e7eeed3f19'];
+const SERVICE_UUID = '7504e3b0-fd7a-4b56-b74d-c6e7eeed3f19';
+const CHARACTERISTIC_UUID = '8b38e5b5-2b9a-4954-9281-fcab195b0912';
 //const SERVICE_UUIDS: string[] = [];  // temporarily empty to scan all devices
 const ALLOW_DUPLICATES = false;
 
@@ -57,6 +60,13 @@ const ConnectScreen = ({ navigation }: { navigation: any }) => {
     const [endTimeWindow, setEndTimeWindow] = useState(new Date());
     const [startTimePopOpen, setStartTimePopOpen] = useState(false);
     const [endTimePopOpen, setEndTimePopOpen] = useState(false);
+
+    // QTR data state
+    const [qtrDataPoints, setQtrDataPoints] = useState<{x: number, y: number}[]>([]);
+    const [isCollectingQTR, setIsCollectingQTR] = useState(false);
+    
+    // Debug/status messages
+    const [statusMessages, setStatusMessages] = useState<string[]>([]);
 
     const startScan = () => {
         console.log('[startScan] called.');
@@ -119,6 +129,38 @@ const ConnectScreen = ({ navigation }: { navigation: any }) => {
     const handleUpdateValueForCharacteristic = (data: BleManagerDidUpdateValueForCharacteristicEvent) => {
         console.log(
             `[handleUpdateValueForCharacteristic] received data from '${data.peripheral}' with characteristic='${data.characteristic}' and value='${data.value}'`,);
+        
+        if (data.value) {
+            const dataString = String.fromCharCode(...data.value);
+            console.log('[Received]', dataString);
+            
+            // Handle acknowledgments from ESP32
+            if (dataString.startsWith('ACK:')) {
+                addStatusMessage(dataString);
+            }
+            // Handle QTR data reception
+            else if (isCollectingQTR) {
+                if (dataString === 'QTR_DATA_END') {
+                    setIsCollectingQTR(false);
+                    addStatusMessage('QTR data collection complete');
+                } else {
+                    // Parse timestamp,value format
+                    const parts = dataString.split(',');
+                    if (parts.length === 2) {
+                        const timestamp = parseInt(parts[0]);
+                        const value = parseInt(parts[1]);
+                        setQtrDataPoints(prev => [...prev, { x: timestamp / 1000, y: value }]); // Convert ms to seconds
+                    }
+                }
+            }
+        }
+    };
+    
+    const addStatusMessage = (message: string) => {
+        setStatusMessages(prev => {
+            const updated = [message, ...prev].slice(0, 5); // Keep last 5 messages
+            return updated;
+        });
     };
 
     const handleDiscoverPeripheral = (peripheral: Peripheral) => {
@@ -228,6 +270,15 @@ const ConnectScreen = ({ navigation }: { navigation: any }) => {
                     }
                     return map;
                 });
+
+                // Set up notifications for the characteristic
+                
+                try {
+                    await BleManager.startNotification(peripheral.id, SERVICE_UUID, CHARACTERISTIC_UUID);
+                    console.log(`[connectPeripheral][${peripheral.id}] notifications enabled for characteristic`);
+                } catch (error) {
+                    console.error(`[connectPeripheral][${peripheral.id}] failed to enable notifications:`, error);
+                }
             }
         } catch (error) {
             console.error(
@@ -506,6 +557,65 @@ const ConnectScreen = ({ navigation }: { navigation: any }) => {
         ) : null;
     };
 
+    // Render status messages
+    const StatusMessages = () => {
+        if (statusMessages.length === 0) {
+            return null;
+        }
+        
+        return (
+            <View style={styles.statusContainer}>
+                <Text style={styles.sectionTitle}>Connection Status</Text>
+                {statusMessages.map((msg, index) => (
+                    <Text key={index} style={styles.statusMessage}>{msg}</Text>
+                ))}
+            </View>
+        );
+    };
+
+    // Render QTR graph if data is available
+    const QTRGraphDisplay = () => {
+        if (qtrDataPoints.length === 0) {
+            return null;
+        }
+
+        // Prepare data for chart
+        const chartData = {
+            labels: qtrDataPoints.map(p => p.x.toFixed(1)),
+            datasets: [
+                {
+                    data: qtrDataPoints.map(p => p.y),
+                    color: () => COLORS.primaryPurpleHex,
+                }
+            ]
+        };
+
+        return (
+            <View style={styles.graphContainer}>
+                <Text style={styles.sectionTitle}>IR Sensor Data</Text>
+                <LineChart
+                    data={chartData}
+                    width={350}
+                    height={220}
+                    chartConfig={{
+                        backgroundColor: COLORS.tirtiaryBlueHex,
+                        backgroundGradientFrom: COLORS.tirtiaryBlueHex,
+                        backgroundGradientTo: COLORS.tirtiaryBlueHex,
+                        color: () => COLORS.whiteHex,
+                        strokeWidth: 2,
+                        useShadowColorFromDataset: false,
+                    }}
+                    style={styles.chart}
+                />
+                <TouchableOpacity
+                    onPress={() => setQtrDataPoints([])}
+                    style={styles.clearButton}>
+                    <Text style={styles.scanButtonText}>Clear Graph</Text>
+                </TouchableOpacity>
+            </View>
+        );
+    };
+
     return (
         <>
             <StatusBar barStyle="default" />
@@ -551,6 +661,9 @@ const ConnectScreen = ({ navigation }: { navigation: any }) => {
 
                                 <View style={styles.controlsContainer}>
                                     <Text style={styles.sectionTitle}>LED Controls</Text>
+                                    
+                                    <StatusMessages />
+
                                     <View style={styles.buttonRow}>
                                         <TouchableOpacity
                                             onPress={() => writePeripheral('light: off')}
@@ -577,11 +690,17 @@ const ConnectScreen = ({ navigation }: { navigation: any }) => {
                                             <Text style={styles.scanButtonText}>QTR Calibrate</Text>
                                         </TouchableOpacity>
                                         <TouchableOpacity
-                                            onPress={() => writePeripheral('qtr: collect')}
+                                            onPress={() => {
+                                                setQtrDataPoints([]);
+                                                setIsCollectingQTR(true);
+                                                writePeripheral('qtr: collect');
+                                            }}
                                             style={[styles.controlButton, styles.buttonSmall]}>
                                             <Text style={styles.scanButtonText}>QTR Collect</Text>
                                         </TouchableOpacity>
                                     </View>
+
+                                    <QTRGraphDisplay />
 
                                     <Text style={styles.sectionTitle}>Time Window</Text>
                                     <View style={styles.timeContainer}>
@@ -716,6 +835,39 @@ const styles = StyleSheet.create({
         position: 'absolute',
         bottom: 50,
         right: 10,
+    },
+    graphContainer: {
+        marginTop: 20,
+        marginBottom: 20,
+        alignItems: 'center',
+        borderRadius: 10,
+        backgroundColor: 'rgba(110, 110, 160, 0.3)',
+        padding: 10,
+    },
+    chart: {
+        borderRadius: 16,
+        marginVertical: 10,
+    },
+    clearButton: {
+        backgroundColor: COLORS.primaryPurpleHex,
+        padding: 10,
+        borderRadius: 10,
+        marginTop: 10,
+        alignItems: 'center',
+    },
+    statusContainer: {
+        backgroundColor: 'rgba(110, 110, 160, 0.3)',
+        borderRadius: 10,
+        padding: 10,
+        marginVertical: 10,
+    },
+    statusMessage: {
+        color: COLORS.whiteHex,
+        fontSize: 14,
+        marginVertical: 4,
+        paddingLeft: 10,
+        borderLeftWidth: 2,
+        borderLeftColor: COLORS.primaryPurpleHex,
     },
     peripheralName: {
         fontSize: 16,

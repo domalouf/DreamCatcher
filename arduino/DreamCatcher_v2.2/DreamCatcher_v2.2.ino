@@ -105,20 +105,30 @@ void checkInput(String value) {
     digitalWrite(LED_PIN, HIGH);
     digitalWrite(LED_PIN26, HIGH);
     LED_PIN_on = true;
+    pCharacteristic->setValue("ACK: light turned on");
+    pCharacteristic->notify();
   }
   else if (value == "light: off") {
     digitalWrite(LED_PIN, LOW);
     digitalWrite(LED_PIN26, LOW);
     LED_PIN_on = false;
+    pCharacteristic->setValue("ACK: light turned off");
+    pCharacteristic->notify();
   }
   else if (value == "trick: yes") {
     doTrick();
+    pCharacteristic->setValue("ACK: trick performed");
+    pCharacteristic->notify();
   }
   else if (value == "qtr: calibrate") {
     initializeQTR();
+    pCharacteristic->setValue("ACK: QTR calibration started");
+    pCharacteristic->notify();
   }
   else if (value == "qtr: collect") {
     qtrDataCollectionMode = true;
+    pCharacteristic->setValue("ACK: QTR data collection started");
+    pCharacteristic->notify();
   }
   else if (value.startsWith("startTime:")) {
     String numStr = value.substring(10);
@@ -253,16 +263,21 @@ void collectQTRData() {
     delay(100); // Sample every 100ms
   }
   
-  Serial.println("Data collection complete. Outputting data...");
+  Serial.println("Data collection complete. Sending data via BLE...");
   
-  // Output all collected data
+  // Send all collected data via BLE as a formatted string
   for (int i = 0; i < sampleCount; i++) {
-    Serial.print(timestamps[i]);
-    Serial.print(",");
-    Serial.println(values[i]);
+    String dataPoint = String(timestamps[i]) + "," + String(values[i]);
+    pCharacteristic->setValue(dataPoint);
+    pCharacteristic->notify();
+    delay(50); // Small delay between notifications
   }
   
-  Serial.println("Data output complete.");
+  // Send completion signal
+  pCharacteristic->setValue("QTR_DATA_END");
+  pCharacteristic->notify();
+  
+  Serial.println("Data transmission complete.");
   digitalWrite(QTR_POWER_PIN, LOW); // Turn off sensor
 }
 
