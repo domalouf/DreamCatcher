@@ -579,9 +579,9 @@ const ConnectScreen = ({ navigation }: { navigation: any }) => {
             return null;
         }
 
-        // Prepare data for chart
+        // Prepare data for chart - show only whole integer seconds
         const chartData = {
-            labels: qtrDataPoints.map(p => p.x.toFixed(1)),
+            labels: qtrDataPoints.map((p) => (Math.abs(p.x - Math.round(p.x)) < 0.05 ? Math.round(p.x).toString() : '')),
             datasets: [
                 {
                     data: qtrDataPoints.map(p => p.y),
@@ -597,6 +597,7 @@ const ConnectScreen = ({ navigation }: { navigation: any }) => {
                     data={chartData}
                     width={350}
                     height={220}
+                    withInnerLines={false}
                     chartConfig={{
                         backgroundColor: COLORS.tirtiaryBlueHex,
                         backgroundGradientFrom: COLORS.tirtiaryBlueHex,
@@ -684,11 +685,6 @@ const ConnectScreen = ({ navigation }: { navigation: any }) => {
 
                                     <Text style={styles.sectionTitle}>QTR Sensor Controls</Text>
                                     <View style={styles.buttonRow}>
-                                        <TouchableOpacity
-                                            onPress={() => writePeripheral('qtr: calibrate')}
-                                            style={[styles.controlButton, styles.buttonSmall]}>
-                                            <Text style={styles.scanButtonText}>QTR Calibrate</Text>
-                                        </TouchableOpacity>
                                         <TouchableOpacity
                                             onPress={() => {
                                                 setQtrDataPoints([]);

@@ -120,11 +120,6 @@ void checkInput(String value) {
     pCharacteristic->setValue("ACK: trick performed");
     pCharacteristic->notify();
   }
-  else if (value == "qtr: calibrate") {
-    initializeQTR();
-    pCharacteristic->setValue("ACK: QTR calibration started");
-    pCharacteristic->notify();
-  }
   else if (value == "qtr: collect") {
     qtrDataCollectionMode = true;
     pCharacteristic->setValue("ACK: QTR data collection started");
@@ -249,6 +244,10 @@ void initializeQTR() {
 
 // Collect QTR sensor data for 10 seconds (sending in real-time)
 void collectQTRData() {
+  // Calibrate sensor before collecting data
+  Serial.println("Calibrating sensor before data collection...");
+  initializeQTR();
+  
   Serial.println("Starting 10-second QTR data collection (real-time mode)...");
   sampleCount = 0;
   

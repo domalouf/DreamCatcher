@@ -1,6 +1,6 @@
 TODO list
 
-Connect the IR sensor on the mask and show on the app with a real time display
+✓ clean up IR graph - Now displays full 10-second x-axis and populates as data arrives
 
 Show storage on the esp32
 Show memory on esp32
