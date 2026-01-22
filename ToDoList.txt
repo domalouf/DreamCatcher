@@ -1,6 +1,4 @@
-TODO list
-
-✓ clean up IR graph - Now displays full 10-second x-axis and populates as data arrives
+TODO list:
 
 Show storage on the esp32
 Show memory on esp32
@@ -8,3 +6,14 @@ Show memory on esp32
 Show battery level of DC mask
 
 Stop app from BT scanning when DC mask is found
+
+Decide how to check for eye movement during sleep
+    - how often to check
+    - when to flash the light (when to decide the user is in REM sleep)
+    - what data to store on esp32 regarding possible dreaming sessions
+    (IR movement graph, times the light went off)
+    - when to re-connect to phone
+    - what data to send to phone
+    - when to delete data on esp32 after it is sent to phone
+
+Have phone and esp32 remember eachother's bluetooth connection (make reconnecting easier)
