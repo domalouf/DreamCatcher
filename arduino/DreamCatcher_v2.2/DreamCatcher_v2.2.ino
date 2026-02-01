@@ -13,6 +13,7 @@
 #include <BLEUtils.h>
 #include <BLE2902.h>
 #include <QTRSensors.h>
+#include <SPIFFS.h>
 
 RTC_DATA_ATTR int bootCount = 0;
 
@@ -49,6 +50,10 @@ bool dreamTime = false;
 int firstSleepTime = 0;     // seconds until dream window starts
 int dreamWindow = 0;        // dream window duration in seconds
 int blinkInterval = 120;    // seconds between blinks during dream window
+
+// Memory monitoring
+unsigned long lastMemorySend = 0;
+const unsigned long MEMORY_SEND_INTERVAL = 60000; // Send memory data every 60 seconds when connected
 
 // LED trick
 void doTrick() {
@@ -125,6 +130,11 @@ void checkInput(String value) {
     pCharacteristic->setValue("ACK: QTR data collection started");
     pCharacteristic->notify();
   }
+  else if (value == "memory: request") {
+    sendMemoryData();
+    pCharacteristic->setValue("ACK: Memory data sent");
+    pCharacteristic->notify();
+  }
   else if (value.startsWith("startTime:")) {
     String numStr = value.substring(10);
     firstSleepTime = numStr.toInt();
@@ -155,11 +165,27 @@ class MyCharacteristicCallbacks : public BLECharacteristicCallbacks {
   }
 };
 
-// Optional: notify connected device (currently commented out in loop)
-void NotifyBLE() {
-  String value = pCharacteristic->getValue();
+// Collect and send memory/storage information
+void sendMemoryData() {
+  // Get RAM information (heap)
+  uint32_t totalRam = ESP.getHeapSize();
+  uint32_t freeRam = ESP.getFreeHeap();
+  
+  // Get storage information (SPIFFS file system)
+  uint32_t totalStorage = SPIFFS.totalBytes();
+  uint32_t freeStorage = SPIFFS.totalBytes() - SPIFFS.usedBytes();
+  
+  // Format data as simple comma-separated values: RAM_total,RAM_free,Storage_total,Storage_free
+  String memoryData = "MEM:";
+  memoryData += String(totalRam) + ",";
+  memoryData += String(freeRam) + ",";
+  memoryData += String(totalStorage) + ",";
+  memoryData += String(freeStorage);
+  
+  pCharacteristic->setValue(memoryData);
   pCharacteristic->notify();
-  Serial.println("Sent notification: " + value);
+  
+  Serial.println("Sent memory data: " + memoryData);
 }
 
 // Start BLE server and advertising
@@ -332,6 +358,14 @@ void loop() {
   }
   if (deviceConnected && !oldDeviceConnected) {
     oldDeviceConnected = deviceConnected;
+    // Send initial memory data when device connects
+    sendMemoryData();
+  }
+
+  // Send memory data periodically when connected
+  if (deviceConnected && millis() - lastMemorySend > MEMORY_SEND_INTERVAL) {
+    sendMemoryData();
+    lastMemorySend = millis();
   }
 
   // Optional: send notifications periodically

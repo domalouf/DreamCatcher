@@ -68,6 +68,14 @@ const ConnectScreen = ({ navigation }: { navigation: any }) => {
     // Debug/status messages
     const [statusMessages, setStatusMessages] = useState<string[]>([]);
 
+    // ESP32 Memory and Storage data
+    const [esp32MemoryData, _setEsp32MemoryData] = useState({
+        totalRam: 378464,
+        freeRam: 334612,
+        totalStorage: 1318001,
+        freeStorage: 1318001,
+    });
+
     const startScan = () => {
         console.log('[startScan] called.');
         if (!isScanning) {
@@ -137,6 +145,28 @@ const ConnectScreen = ({ navigation }: { navigation: any }) => {
             // Handle acknowledgments from ESP32
             if (dataString.startsWith('ACK:')) {
                 addStatusMessage(dataString);
+            }
+            // Handle memory data
+            else if (dataString.startsWith('MEM:')) {
+                try {
+                    const csvString = dataString.substring(4); // Remove "MEM:" prefix
+                    const values = csvString.split(',');
+                    
+                    if (values.length === 4) {
+                        _setEsp32MemoryData({
+                            totalRam: parseInt(values[0]),
+                            freeRam: parseInt(values[1]),
+                            totalStorage: parseInt(values[2]),
+                            freeStorage: parseInt(values[3]),
+                        });
+                        console.log('Updated memory data from CSV:', values);
+                    } else {
+                        console.error('Invalid memory data format - expected 4 values, got:', values.length);
+                    }
+                } catch (error) {
+                    console.error('Failed to parse memory data:', error);
+                    console.error('Raw data string:', dataString);
+                }
             }
             // Handle QTR data reception
             else if (isCollectingQTR) {
@@ -617,6 +647,32 @@ const ConnectScreen = ({ navigation }: { navigation: any }) => {
         );
     };
 
+    // Render ESP32 Memory and Storage information
+    const ESP32MemoryStorageDisplay = () => {
+        const usedRam = esp32MemoryData.totalRam - esp32MemoryData.freeRam;
+        const usedStorage = esp32MemoryData.totalStorage - esp32MemoryData.freeStorage;
+        
+        return (
+            <View style={styles.memoryContainer}>
+                <Text style={styles.sectionTitle}>ESP32 Memory & Storage</Text>
+                
+                <View style={styles.memorySection}>
+                    <Text style={styles.memorySectionTitle}>RAM (Memory)</Text>
+                    <Text style={styles.memoryText}>Total: {esp32MemoryData.totalRam.toLocaleString()} bytes</Text>
+                    <Text style={styles.memoryText}>Used: {usedRam.toLocaleString()} bytes</Text>
+                    <Text style={styles.memoryText}>Free: {esp32MemoryData.freeRam.toLocaleString()} bytes</Text>
+                </View>
+                
+                <View style={styles.memorySection}>
+                    <Text style={styles.memorySectionTitle}>Storage (File System)</Text>
+                    <Text style={styles.memoryText}>Total: {esp32MemoryData.totalStorage.toLocaleString()} bytes</Text>
+                    <Text style={styles.memoryText}>Used: {usedStorage.toLocaleString()} bytes</Text>
+                    <Text style={styles.memoryText}>Free: {esp32MemoryData.freeStorage.toLocaleString()} bytes</Text>
+                </View>
+            </View>
+        );
+    };
+
     return (
         <>
             <StatusBar barStyle="default" />
@@ -697,6 +753,15 @@ const ConnectScreen = ({ navigation }: { navigation: any }) => {
                                     </View>
 
                                     <QTRGraphDisplay />
+
+                                    <Text style={styles.sectionTitle}>Memory & Storage</Text>
+                                    <TouchableOpacity
+                                        onPress={() => writePeripheral('memory: request')}
+                                        style={styles.controlButton}>
+                                        <Text style={styles.scanButtonText}>Request Memory Data</Text>
+                                    </TouchableOpacity>
+
+                                    <ESP32MemoryStorageDisplay />
 
                                     <Text style={styles.sectionTitle}>Time Window</Text>
                                     <View style={styles.timeContainer}>
@@ -864,6 +929,26 @@ const styles = StyleSheet.create({
         paddingLeft: 10,
         borderLeftWidth: 2,
         borderLeftColor: COLORS.primaryPurpleHex,
+    },
+    memoryContainer: {
+        backgroundColor: 'rgba(110, 110, 160, 0.3)',
+        borderRadius: 10,
+        padding: 10,
+        marginVertical: 10,
+    },
+    memorySection: {
+        marginVertical: 10,
+    },
+    memorySectionTitle: {
+        fontSize: 16,
+        color: COLORS.primaryPurpleHex,
+        fontWeight: 'bold',
+        marginBottom: 5,
+    },
+    memoryText: {
+        color: COLORS.whiteHex,
+        fontSize: 14,
+        marginVertical: 2,
     },
     peripheralName: {
         fontSize: 16,
