@@ -17,6 +17,8 @@
 #include <SPIFFS.h>
 
 RTC_DATA_ATTR int bootCount = 0;
+RTC_DATA_ATTR bool dreamTime = false;
+RTC_DATA_ATTR bool baselineSet = true;
 
 #define uS_TO_S_FACTOR 1000000ULL
 const int buttonPin = 33;           // Not used for wakeup, but kept for future
@@ -47,10 +49,17 @@ bool oldDeviceConnected = false;
 #define CHARACTERISTIC_UUID "8b38e5b5-2b9a-4954-9281-fcab195b0912"
 
 bool LED_PIN_on = false;
-bool dreamTime = false;
 int firstSleepTime = 0;     // seconds until dream window starts
 int dreamWindow = 0;        // dream window duration in seconds
 int blinkInterval = 120;    // seconds between blinks during dream window
+
+// Dream detection variables
+uint16_t baselineValue = 0;
+int checkInterval = 20; // seconds
+unsigned long lastFlashTime = 0;
+const unsigned long FLASH_COOLDOWN = 60000; // 1 min
+int movementThreshold = 100; // adjust based on calibration
+const char* dataFile = "/dream_data.csv";
 
 // Memory monitoring
 unsigned long lastMemorySend = 0;
@@ -170,6 +179,11 @@ void checkInput(String value) {
     Serial.print("Dream window duration set to: ");
     Serial.println(dreamWindow);
   }
+  else if (value == "dream: data") {
+    sendStoredData();
+    pCharacteristic->setValue("ACK: Dream data sent");
+    pCharacteristic->notify();
+  }
 }
 
 // BLE Characteristic callbacks
@@ -218,6 +232,43 @@ void sendMemoryData() {
   pCharacteristic->setValue(storageData);
   pCharacteristic->notify();
   Serial.println("Sent storage data: " + storageData);
+}
+
+// Store dream data to SPIFFS
+void storeData(unsigned long timestamp, uint16_t value, bool isFlash) {
+  File file = SPIFFS.open(dataFile, "a");
+  if (file) {
+    file.printf("%lu,%u,%d\n", timestamp, value, isFlash ? 1 : 0);
+    file.close();
+    Serial.println("Data stored: " + String(timestamp) + "," + String(value) + "," + String(isFlash ? 1 : 0));
+  } else {
+    Serial.println("Failed to open file for writing");
+  }
+}
+
+// Send stored dream data and delete file
+void sendStoredData() {
+  if (!SPIFFS.exists(dataFile)) {
+    Serial.println("No dream data file found");
+    return;
+  }
+  File file = SPIFFS.open(dataFile, "r");
+  if (file) {
+    Serial.println("Sending stored dream data...");
+    while (file.available()) {
+      String line = file.readStringUntil('\n');
+      if (line.length() > 0) {
+        pCharacteristic->setValue("DREAM:" + line);
+        pCharacteristic->notify();
+        delay(50); // Delay to avoid overwhelming BLE
+      }
+    }
+    file.close();
+    SPIFFS.remove(dataFile);
+    Serial.println("Dream data sent and file deleted");
+  } else {
+    Serial.println("Failed to open dream data file");
+  }
 }
 
 // Start BLE server and advertising
@@ -311,6 +362,40 @@ void initializeQTR() {
   Serial.println("QTR calibration complete.");
 }
 
+// Check for eye movement and trigger flash if detected
+void checkForMovement() {
+  if (!baselineSet) {
+    // Set baseline by averaging initial readings
+    initializeQTR();
+    uint32_t sum = 0;
+    for (int i = 0; i < 10; i++) {
+      qtr.read(sensorValues);
+      sum += sensorValues[0];
+      delay(100);
+    }
+    baselineValue = sum / 10;
+    baselineSet = true;
+    digitalWrite(QTR_POWER_PIN, LOW);
+    Serial.println("Baseline set: " + String(baselineValue));
+  } else {
+    // Check for movement
+    pinMode(QTR_POWER_PIN, OUTPUT);
+    digitalWrite(QTR_POWER_PIN, HIGH);
+    delay(100); // Warm up sensor
+    qtr.read(sensorValues);
+    uint16_t current = sensorValues[0];
+    digitalWrite(QTR_POWER_PIN, LOW);
+    Serial.println("Current value: " + String(current));
+    
+    if (abs(current - baselineValue) > movementThreshold && (millis() - lastFlashTime > FLASH_COOLDOWN || lastFlashTime == 0)) {
+      blinkLED(3, 300); // Flash 3 times on detection
+      lastFlashTime = millis();
+      storeData(millis(), current, true);
+      Serial.println("Movement detected, flashed light");
+    }
+  }
+}
+
 // Collect QTR sensor data for 10 seconds (sending in real-time)
 void collectQTRData() {
   // Calibrate sensor before collecting data
@@ -366,14 +451,15 @@ void setup() {
 
   // If wakeup was from a timer and the mask isn't in dream mode -> enter dream mode
   if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER && !dreamTime) {
+    Serial.println("Woke up for first time after timer");
     dreamTime = true;
-    blinkLED(5, 300);
-    goToSleep(blinkInterval);
+    // Start checking for movement
+    goToSleep(checkInterval);
   }
-  // If already in dream mode -> continue blinking cycle
+  // If already in dream mode -> check for movement
   else if (dreamTime) {
-    blinkLED(5, 300);
-    goToSleep(blinkInterval);
+    checkForMovement();
+    goToSleep(checkInterval);
   }
 
   // Otherwise: normal boot -> start BLE for configuration
@@ -396,7 +482,7 @@ void loop() {
 
   // Show we're waiting for config (slow blink when not connected and not dreaming)
   if (!deviceConnected && !dreamTime) {
-    blinkLED(1, 500);
+    blinkLED(1, 3000);
   }
 
   // Handle BLE advertising restart on disconnect
@@ -410,6 +496,8 @@ void loop() {
     oldDeviceConnected = deviceConnected;
     // Send initial memory data when device connects
     sendMemoryData();
+    // Send stored dream data
+    sendStoredData();
   }
 
   // Send memory data periodically when connected

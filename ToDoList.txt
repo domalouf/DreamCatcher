@@ -1,16 +1,15 @@
 TODO list:
 
-Stop app from BT scanning when DC mask is found
-
 Decide how to check for eye movement during sleep
     - how often to check
     - when to flash the light (when to decide the user is in REM sleep)
     - what data to store on esp32 regarding possible dreaming sessions
-    (IR movement graph, times the light went off)
-    - when to re-connect to phone
-    - what data to send to phone
-    - when to delete data on esp32 after it is sent to phone
+    (IR movement graph, times the light went off, maybe more if storage permits)
+    - what data to send to phone on reconnecting
+    - delete data on esp32 after it is sent to phone
 
 Show battery level of DC mask
 
 Have phone and esp32 remember eachother's bluetooth connection (make reconnecting easier)
+
+Stop app from BT scanning when DC mask is found
