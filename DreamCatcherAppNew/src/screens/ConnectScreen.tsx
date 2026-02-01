@@ -3,6 +3,7 @@ import { View, StatusBar, Text, StyleSheet, ImageBackground, Linking } from 'rea
 import { SafeAreaView } from 'react-native-safe-area-context';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { differenceInMilliseconds } from 'date-fns';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 // stuff for ble
 import {
     Platform,
@@ -44,6 +45,7 @@ const SERVICE_UUID = '7504e3b0-fd7a-4b56-b74d-c6e7eeed3f19';
 const CHARACTERISTIC_UUID = '8b38e5b5-2b9a-4954-9281-fcab195b0912';
 //const SERVICE_UUIDS: string[] = [];  // temporarily empty to scan all devices
 const ALLOW_DUPLICATES = false;
+const LAST_CONNECTED_PERIPHERAL_KEY = '@last_connected_peripheral';
 
 const ConnectScreen = ({ navigation }: { navigation: any }) => {
     const [isScanning, setIsScanning] = useState(false);
@@ -75,6 +77,9 @@ const ConnectScreen = ({ navigation }: { navigation: any }) => {
         totalStorage: 1318001,
         freeStorage: 1318001,
     });
+
+    // Auto-reconnection state
+    const [isAutoReconnecting, setIsAutoReconnecting] = useState(false);
 
     const startScan = () => {
         console.log('[startScan] called.');
@@ -337,6 +342,14 @@ const ConnectScreen = ({ navigation }: { navigation: any }) => {
                 } catch (error) {
                     console.error(`[connectPeripheral][${peripheral.id}] failed to enable notifications:`, error);
                 }
+
+                // Save the connected peripheral for auto-reconnection
+                try {
+                    await AsyncStorage.setItem(LAST_CONNECTED_PERIPHERAL_KEY, peripheral.id);
+                    console.log(`[connectPeripheral] Saved peripheral ${peripheral.id} for auto-reconnection`);
+                } catch (error) {
+                    console.error('[connectPeripheral] Failed to save peripheral ID:', error);
+                }
             }
         } catch (error) {
             console.error(
@@ -445,6 +458,75 @@ const ConnectScreen = ({ navigation }: { navigation: any }) => {
         setIsMaskSleep(true);
     };
 
+    // Auto-reconnect to the last connected peripheral
+    const autoReconnect = async () => {
+        try {
+            const lastPeripheralId = await AsyncStorage.getItem(LAST_CONNECTED_PERIPHERAL_KEY);
+            if (!lastPeripheralId) {
+                console.log('[autoReconnect] No previously connected peripheral found');
+                return;
+            }
+
+            console.log(`[autoReconnect] Attempting to reconnect to ${lastPeripheralId}`);
+            setIsAutoReconnecting(true);
+            addStatusMessage(`Attempting to reconnect to last device...`);
+
+            // Check if the peripheral is already connected
+            const isConnected = await BleManager.isPeripheralConnected(lastPeripheralId, []);
+            if (isConnected) {
+                console.log(`[autoReconnect] Peripheral ${lastPeripheralId} is already connected`);
+                // Try to retrieve services and set up notifications
+                const peripheralData = await BleManager.retrieveServices(lastPeripheralId);
+                setConnectedPeripherals(map => {
+                    return new Map(map.set(lastPeripheralId, { 
+                        id: lastPeripheralId, 
+                        name: 'Dream Catcher',
+                        rssi: 0,
+                        advertising: {}
+                    } as Peripheral));
+                });
+                
+                try {
+                    await BleManager.startNotification(lastPeripheralId, SERVICE_UUID, CHARACTERISTIC_UUID);
+                    console.log(`[autoReconnect] Notifications enabled for ${lastPeripheralId}`);
+                    addStatusMessage(`Reconnected to device successfully`);
+                } catch (error) {
+                    console.error(`[autoReconnect] Failed to enable notifications:`, error);
+                }
+            } else {
+                // Try to connect
+                await BleManager.connect(lastPeripheralId);
+                console.log(`[autoReconnect] Connected to ${lastPeripheralId}`);
+                
+                // Retrieve services and set up
+                const peripheralData = await BleManager.retrieveServices(lastPeripheralId);
+                setConnectedPeripherals(map => {
+                    return new Map(map.set(lastPeripheralId, { 
+                        id: lastPeripheralId, 
+                        name: 'Dream Catcher',
+                        rssi: 0,
+                        advertising: {}
+                    } as Peripheral));
+                });
+                
+                try {
+                    await BleManager.startNotification(lastPeripheralId, SERVICE_UUID, CHARACTERISTIC_UUID);
+                    console.log(`[autoReconnect] Notifications enabled for ${lastPeripheralId}`);
+                    addStatusMessage(`Reconnected to device successfully`);
+                } catch (error) {
+                    console.error(`[autoReconnect] Failed to enable notifications:`, error);
+                }
+            }
+        } catch (error) {
+            console.error('[autoReconnect] Failed to auto-reconnect:', error);
+            addStatusMessage(`Failed to reconnect to device`);
+            // Clear the stored peripheral ID if reconnection fails
+            await AsyncStorage.removeItem(LAST_CONNECTED_PERIPHERAL_KEY);
+        } finally {
+            setIsAutoReconnecting(false);
+        }
+    };
+
     // How you can tap? Go sleep. Go sleep.
     function sleep(ms: number) {
         return new Promise<void>(resolve => setTimeout(resolve, ms));
@@ -454,7 +536,13 @@ const ConnectScreen = ({ navigation }: { navigation: any }) => {
     useEffect(() => {
         try {
             BleManager.start({ showAlert: false })
-                .then(() => console.log('BleManager started.'))
+                .then(() => {
+                    console.log('BleManager started.');
+                    // Attempt auto-reconnection after BLE is initialized
+                    setTimeout(() => {
+                        autoReconnect();
+                    }, 2000); // Wait 2 seconds for BLE to fully initialize
+                })
                 .catch((error: any) =>
                     console.error('BeManager could not be started.', error),
                 );
@@ -713,10 +801,14 @@ const ConnectScreen = ({ navigation }: { navigation: any }) => {
                     <Text style={styles.title}>Dream Catcher</Text>
 
                     <View>
-                        <TouchableOpacity onPress={startScan} style={styles.scanButton}>
-                            {isScanning ?
-                                <Text style={styles.scanButtonText}>Scanning ...</Text> :
-                                <Text style={styles.scanButtonText}>Scan for Peripherals</Text>}
+                        <TouchableOpacity onPress={startScan} style={styles.scanButton} disabled={isAutoReconnecting}>
+                            {isAutoReconnecting ? (
+                                <Text style={styles.scanButtonText}>Reconnecting...</Text>
+                            ) : isScanning ? (
+                                <Text style={styles.scanButtonText}>Scanning ...</Text>
+                            ) : (
+                                <Text style={styles.scanButtonText}>Scan for Peripherals</Text>
+                            )}
                         </TouchableOpacity>
                     </View>
 

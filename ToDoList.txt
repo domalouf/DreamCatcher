@@ -1,10 +1,5 @@
 TODO list:
 
-Show storage on the esp32
-Show memory on esp32
-
-Show battery level of DC mask
-
 Stop app from BT scanning when DC mask is found
 
 Decide how to check for eye movement during sleep
@@ -15,5 +10,7 @@ Decide how to check for eye movement during sleep
     - when to re-connect to phone
     - what data to send to phone
     - when to delete data on esp32 after it is sent to phone
+
+Show battery level of DC mask
 
 Have phone and esp32 remember eachother's bluetooth connection (make reconnecting easier)

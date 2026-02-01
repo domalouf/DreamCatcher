@@ -12,6 +12,7 @@
 #include <BLEServer.h>
 #include <BLEUtils.h>
 #include <BLE2902.h>
+#include <BLESecurity.h>
 #include <QTRSensors.h>
 #include <SPIFFS.h>
 
@@ -99,6 +100,28 @@ class MyServerCallbacks : public BLEServerCallbacks {
   void onDisconnect(BLEServer* pServer) {
     deviceConnected = false;
     Serial.println("Device disconnected");
+  }
+};
+
+// BLE Security callbacks
+class MySecurity : public BLESecurityCallbacks {
+  uint32_t onPassKeyRequest(){
+    Serial.println("PassKeyRequest");
+    return 123456; // Return a fixed passkey for simplicity
+  }
+  void onPassKeyNotify(uint32_t pass_key){
+    Serial.printf("The passkey Notify number:%d\n", pass_key);
+  }
+  bool onConfirmPIN(uint32_t pass_key){
+    Serial.printf("The passkey YES/NO number:%d\n", pass_key);
+    return true; // Auto-confirm for simplicity
+  }
+  bool onSecurityRequest(){
+    Serial.println("SecurityRequest");
+    return true;
+  }
+  void onAuthenticationComplete(esp_ble_auth_cmpl_t cmpl){
+    Serial.println("Authentication Complete");
   }
 };
 
@@ -200,8 +223,16 @@ void sendMemoryData() {
 // Start BLE server and advertising
 void startBLE() {
   BLEDevice::init("Dream Catcher");
+  BLEDevice::setSecurityCallbacks(new MySecurity());
+
   pServer = BLEDevice::createServer();
   pServer->setCallbacks(new MyServerCallbacks());
+  
+  // Enable security with bonding
+  BLESecurity *pSecurity = new BLESecurity();
+  pSecurity->setAuthenticationMode(ESP_LE_AUTH_BOND);
+  pSecurity->setCapability(ESP_IO_CAP_NONE);
+  pSecurity->setInitEncryptionKey(ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK);
 
   BLEService *pService = pServer->createService(SERVICE_UUID);
 
@@ -217,6 +248,9 @@ void startBLE() {
   pDescriptor->setNotifications(true);
   pCharacteristic->addDescriptor(pDescriptor);
   pCharacteristic->setCallbacks(new MyCharacteristicCallbacks());
+  
+  // Set security on the characteristic
+  pCharacteristic->setAccessPermissions(ESP_GATT_PERM_READ_ENCRYPTED | ESP_GATT_PERM_WRITE_ENCRYPTED);
 
   pCharacteristic->setValue("light: off");
 
@@ -229,7 +263,7 @@ void startBLE() {
   pAdvertising->setMaxPreferred(0x12);
   BLEDevice::startAdvertising();
 
-  Serial.println("BLE started - waiting for connection...");
+  Serial.println("BLE started with security enabled - waiting for connection...");
 }
 
 // Blink both LEDs
