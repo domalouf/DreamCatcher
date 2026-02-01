@@ -172,20 +172,29 @@ void sendMemoryData() {
   uint32_t freeRam = ESP.getFreeHeap();
   
   // Get storage information (SPIFFS file system)
-  uint32_t totalStorage = SPIFFS.totalBytes();
-  uint32_t freeStorage = SPIFFS.totalBytes() - SPIFFS.usedBytes();
+  uint32_t totalStorage = 0;
+  uint32_t freeStorage = 0;
   
-  // Format data as simple comma-separated values: RAM_total,RAM_free,Storage_total,Storage_free
-  String memoryData = "MEM:";
-  memoryData += String(totalRam) + ",";
-  memoryData += String(freeRam) + ",";
-  memoryData += String(totalStorage) + ",";
-  memoryData += String(freeStorage);
+  if (SPIFFS.begin()) {
+    totalStorage = SPIFFS.totalBytes();
+    freeStorage = totalStorage - SPIFFS.usedBytes();
+    Serial.println("SPIFFS OK - Total: " + String(totalStorage) + ", Free: " + String(freeStorage));
+  } else {
+    Serial.println("SPIFFS not available for memory data");
+  }
   
-  pCharacteristic->setValue(memoryData);
+  // Send RAM data first
+  String ramData = "RAM:" + String(totalRam) + "," + String(freeRam);
+  pCharacteristic->setValue(ramData);
   pCharacteristic->notify();
+  Serial.println("Sent RAM data: " + ramData);
+  delay(50); // Small delay between transmissions
   
-  Serial.println("Sent memory data: " + memoryData);
+  // Send storage data second
+  String storageData = "STOR:" + String(totalStorage) + "," + String(freeStorage);
+  pCharacteristic->setValue(storageData);
+  pCharacteristic->notify();
+  Serial.println("Sent storage data: " + storageData);
 }
 
 // Start BLE server and advertising
@@ -307,6 +316,13 @@ void setup() {
   Serial.begin(115200);
   pinMode(LED_PIN, OUTPUT);
   pinMode(LED_PIN26, OUTPUT);
+
+  // Initialize SPIFFS
+  if (!SPIFFS.begin(true)) {
+    Serial.println("SPIFFS Mount Failed");
+  } else {
+    Serial.println("SPIFFS Mounted Successfully");
+  }
 
   ++bootCount;
   Serial.print("Boot count: ");

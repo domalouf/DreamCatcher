@@ -140,31 +140,59 @@ const ConnectScreen = ({ navigation }: { navigation: any }) => {
         
         if (data.value) {
             const dataString = String.fromCharCode(...data.value);
-            console.log('[Received]', dataString);
+            console.log('[Received RAW]', dataString, 'Length:', dataString.length);
             
             // Handle acknowledgments from ESP32
             if (dataString.startsWith('ACK:')) {
                 addStatusMessage(dataString);
             }
             // Handle memory data
-            else if (dataString.startsWith('MEM:')) {
+            else if (dataString.startsWith('RAM:')) {
                 try {
-                    const csvString = dataString.substring(4); // Remove "MEM:" prefix
+                    const csvString = dataString.substring(4); // Remove "RAM:" prefix
                     const values = csvString.split(',');
                     
-                    if (values.length === 4) {
-                        _setEsp32MemoryData({
-                            totalRam: parseInt(values[0]),
-                            freeRam: parseInt(values[1]),
-                            totalStorage: parseInt(values[2]),
-                            freeStorage: parseInt(values[3]),
-                        });
-                        console.log('Updated memory data from CSV:', values);
+                    if (values.length === 2) {
+                        const totalRam = parseInt(values[0]) || 0;
+                        const freeRam = parseInt(values[1]) || 0;
+                        
+                        // Update only RAM data, keep existing storage data
+                        _setEsp32MemoryData(prev => ({
+                            ...prev,
+                            totalRam,
+                            freeRam
+                        }));
+                        console.log('Updated RAM data:', { totalRam, freeRam });
                     } else {
-                        console.error('Invalid memory data format - expected 4 values, got:', values.length);
+                        console.error('Invalid RAM data format - expected 2 values, got:', values.length);
                     }
                 } catch (error) {
-                    console.error('Failed to parse memory data:', error);
+                    console.error('Failed to parse RAM data:', error);
+                    console.error('Raw data string:', dataString);
+                }
+            }
+            // Handle storage data
+            else if (dataString.startsWith('STOR:')) {
+                try {
+                    const csvString = dataString.substring(5); // Remove "STOR:" prefix
+                    const values = csvString.split(',');
+                    
+                    if (values.length === 2) {
+                        const totalStorage = parseInt(values[0]) || 0;
+                        const freeStorage = parseInt(values[1]) || 0;
+                        
+                        // Update only storage data, keep existing RAM data
+                        _setEsp32MemoryData(prev => ({
+                            ...prev,
+                            totalStorage,
+                            freeStorage
+                        }));
+                        console.log('Updated storage data:', { totalStorage, freeStorage });
+                    } else {
+                        console.error('Invalid storage data format - expected 2 values, got:', values.length);
+                    }
+                } catch (error) {
+                    console.error('Failed to parse storage data:', error);
                     console.error('Raw data string:', dataString);
                 }
             }
