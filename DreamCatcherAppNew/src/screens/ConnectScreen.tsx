@@ -66,6 +66,7 @@ const ConnectScreen = ({ navigation }: { navigation: any }) => {
     // QTR data state
     const [qtrDataPoints, setQtrDataPoints] = useState<{x: number, y: number}[]>([]);
     const [isCollectingQTR, setIsCollectingQTR] = useState(false);
+    const [isDemoActive, setIsDemoActive] = useState(false);
     
     // Debug/status messages
     const [statusMessages, setStatusMessages] = useState<string[]>([]);
@@ -150,6 +151,12 @@ const ConnectScreen = ({ navigation }: { navigation: any }) => {
             // Handle acknowledgments from ESP32
             if (dataString.startsWith('ACK:')) {
                 addStatusMessage(dataString);
+                if (dataString.toLowerCase().includes('demo started')) {
+                    setIsDemoActive(true);
+                }
+                if (dataString.toLowerCase().includes('demo stopped')) {
+                    setIsDemoActive(false);
+                }
             }
             // Handle memory data
             else if (dataString.startsWith('RAM:')) {
@@ -456,6 +463,16 @@ const ConnectScreen = ({ navigation }: { navigation: any }) => {
         writePeripheral("scanTime: " + scanTime);
 
         setIsMaskSleep(true);
+    };
+
+    const startDemoTest = () => {
+        setIsDemoActive(true);
+        writePeripheral('demo: start');
+    };
+
+    const stopDemoTest = () => {
+        setIsDemoActive(false);
+        writePeripheral('demo: stop');
     };
 
     // Auto-reconnect to the last connected peripheral
@@ -872,6 +889,25 @@ const ConnectScreen = ({ navigation }: { navigation: any }) => {
                                         </TouchableOpacity>
                                     </View>
 
+                                    <Text style={styles.sectionTitle}>REM Demo Test</Text>
+                                    <Text style={styles.helpText}>
+                                        Wear the mask and blink your eyes. The LED turns on when movement is detected.
+                                    </Text>
+                                    <View style={styles.buttonRow}>
+                                        <TouchableOpacity
+                                            onPress={startDemoTest}
+                                            style={[styles.controlButton, styles.buttonSmall]}
+                                            disabled={isDemoActive}>
+                                            <Text style={styles.scanButtonText}>Start Demo</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                            onPress={stopDemoTest}
+                                            style={[styles.controlButton, styles.buttonSmall]}
+                                            disabled={!isDemoActive}>
+                                            <Text style={styles.scanButtonText}>Stop Demo</Text>
+                                        </TouchableOpacity>
+                                    </View>
+
                                     <QTRGraphDisplay />
 
                                     <Text style={styles.sectionTitle}>Memory & Storage</Text>
@@ -951,6 +987,13 @@ const styles = StyleSheet.create({
         color: COLORS.whiteHex,
         textAlign: 'center',
         marginVertical: 10,
+    },
+    helpText: {
+        fontSize: 14,
+        color: COLORS.whiteHex,
+        textAlign: 'center',
+        marginBottom: 8,
+        opacity: 0.85,
     },
     sectionTitle: {
         fontSize: 20,

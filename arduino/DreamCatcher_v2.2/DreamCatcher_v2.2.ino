@@ -60,6 +60,9 @@ unsigned long lastFlashTime = 0;
 const unsigned long FLASH_COOLDOWN = 60000; // 1 min
 int movementThreshold = 100; // adjust based on calibration
 const char* dataFile = "/dream_data.csv";
+bool demoMode = false;
+unsigned long lastDemoSampleMs = 0;
+const unsigned long DEMO_SAMPLE_INTERVAL_MS = 50; // 20 Hz
 
 // Memory monitoring
 unsigned long lastMemorySend = 0;
@@ -182,6 +185,22 @@ void checkInput(String value) {
   else if (value == "dream: data") {
     sendStoredData();
     pCharacteristic->setValue("ACK: Dream data sent");
+    pCharacteristic->notify();
+  }
+  else if (value == "demo: start") {
+    demoMode = true;
+    baselineSet = false;
+    lastDemoSampleMs = 0;
+    digitalWrite(LED_PIN, LOW);
+    digitalWrite(LED_PIN26, LOW);
+    pCharacteristic->setValue("ACK: demo started");
+    pCharacteristic->notify();
+  }
+  else if (value == "demo: stop") {
+    demoMode = false;
+    digitalWrite(LED_PIN, LOW);
+    digitalWrite(LED_PIN26, LOW);
+    pCharacteristic->setValue("ACK: demo stopped");
     pCharacteristic->notify();
   }
 }
@@ -362,21 +381,25 @@ void initializeQTR() {
   Serial.println("QTR calibration complete.");
 }
 
+void setBaselineFromSensor() {
+  initializeQTR();
+  uint32_t sum = 0;
+  for (int i = 0; i < 10; i++) {
+    qtr.read(sensorValues);
+    sum += sensorValues[0];
+    delay(100);
+  }
+  baselineValue = sum / 10;
+  baselineSet = true;
+  digitalWrite(QTR_POWER_PIN, LOW);
+  Serial.println("Baseline set: " + String(baselineValue));
+}
+
 // Check for eye movement and trigger flash if detected
 void checkForMovement() {
   if (!baselineSet) {
     // Set baseline by averaging initial readings
-    initializeQTR();
-    uint32_t sum = 0;
-    for (int i = 0; i < 10; i++) {
-      qtr.read(sensorValues);
-      sum += sensorValues[0];
-      delay(100);
-    }
-    baselineValue = sum / 10;
-    baselineSet = true;
-    digitalWrite(QTR_POWER_PIN, LOW);
-    Serial.println("Baseline set: " + String(baselineValue));
+    setBaselineFromSensor();
   } else {
     // Check for movement
     pinMode(QTR_POWER_PIN, OUTPUT);
@@ -393,6 +416,38 @@ void checkForMovement() {
       storeData(millis(), current, true);
       Serial.println("Movement detected, flashed light");
     }
+  }
+}
+
+void runDemoTest() {
+  if (!demoMode) {
+    return;
+  }
+
+  unsigned long now = millis();
+  if (now - lastDemoSampleMs < DEMO_SAMPLE_INTERVAL_MS) {
+    return;
+  }
+  lastDemoSampleMs = now;
+
+  if (!baselineSet) {
+    setBaselineFromSensor();
+    return;
+  }
+
+  pinMode(QTR_POWER_PIN, OUTPUT);
+  digitalWrite(QTR_POWER_PIN, HIGH);
+  delay(5);
+  qtr.read(sensorValues);
+  uint16_t current = sensorValues[0];
+  digitalWrite(QTR_POWER_PIN, LOW);
+
+  if (abs(current - baselineValue) > movementThreshold) {
+    digitalWrite(LED_PIN, HIGH);
+    digitalWrite(LED_PIN26, HIGH);
+  } else {
+    digitalWrite(LED_PIN, LOW);
+    digitalWrite(LED_PIN26, LOW);
   }
 }
 
@@ -468,6 +523,8 @@ void setup() {
 
 // if the mask is in the loop, then it is waiting for instructions on when to sleep
 void loop() {
+  runDemoTest();
+
   // Handle QTR data collection if requested
   if (qtrDataCollectionMode) {
     collectQTRData();
@@ -475,7 +532,7 @@ void loop() {
   }
 
   // If we have received both values → start the long sleep to dream window
-  if (dreamWindow > 0 && firstSleepTime > 0 && !dreamTime) {
+  if (!demoMode && dreamWindow > 0 && firstSleepTime > 0 && !dreamTime) {
     delay(1000); // give time to disconnect if needed
     goToSleep(firstSleepTime);
   }
