@@ -46,6 +46,8 @@ const CHARACTERISTIC_UUID = '8b38e5b5-2b9a-4954-9281-fcab195b0912';
 //const SERVICE_UUIDS: string[] = [];  // temporarily empty to scan all devices
 const ALLOW_DUPLICATES = false;
 const LAST_CONNECTED_PERIPHERAL_KEY = '@last_connected_peripheral';
+const MOVEMENT_THRESHOLD = 100;
+const MOVEMENT_WINDOW_SIZE = 5;
 
 const ConnectScreen = ({ navigation }: { navigation: any }) => {
     const [isScanning, setIsScanning] = useState(false);
@@ -749,6 +751,20 @@ const ConnectScreen = ({ navigation }: { navigation: any }) => {
             return null;
         }
 
+        const movementInfo = (() => {
+            if (qtrDataPoints.length < 2) {
+                return { isMoving: false };
+            }
+
+            const lastPoint = qtrDataPoints[qtrDataPoints.length - 1];
+            const windowSize = Math.min(MOVEMENT_WINDOW_SIZE, qtrDataPoints.length - 1);
+            const windowPoints = qtrDataPoints.slice(-1 - windowSize, -1);
+            const avg = windowPoints.reduce((sum, point) => sum + point.y, 0) / windowPoints.length;
+            const delta = Math.abs(lastPoint.y - avg);
+
+            return { isMoving: delta >= MOVEMENT_THRESHOLD };
+        })();
+
         // Prepare data for chart - show only whole integer seconds
         const chartData = {
             labels: qtrDataPoints.map((p) => (Math.abs(p.x - Math.round(p.x)) < 0.05 ? Math.round(p.x).toString() : '')),
@@ -763,6 +779,18 @@ const ConnectScreen = ({ navigation }: { navigation: any }) => {
         return (
             <View style={styles.graphContainer}>
                 <Text style={styles.sectionTitle}>IR Sensor Data</Text>
+                <View style={styles.movementRow}>
+                    <Text style={styles.movementLabel}>Movement</Text>
+                    <View
+                        style={[
+                            styles.movementBadge,
+                            movementInfo.isMoving ? styles.movementBadgeTrue : styles.movementBadgeFalse,
+                        ]}>
+                        <Text style={styles.movementBadgeText}>
+                            {movementInfo.isMoving ? 'true' : 'false'}
+                        </Text>
+                    </View>
+                </View>
                 <LineChart
                     data={chartData}
                     width={350}
@@ -1085,6 +1113,38 @@ const styles = StyleSheet.create({
         borderRadius: 10,
         marginTop: 10,
         alignItems: 'center',
+    },
+    movementRow: {
+        width: '100%',
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginTop: 6,
+        marginBottom: 6,
+        paddingHorizontal: 6,
+    },
+    movementLabel: {
+        color: COLORS.whiteHex,
+        fontSize: 14,
+        letterSpacing: 0.2,
+    },
+    movementBadge: {
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 12,
+        minWidth: 52,
+        alignItems: 'center',
+    },
+    movementBadgeTrue: {
+        backgroundColor: COLORS.primaryOrangeHex,
+    },
+    movementBadgeFalse: {
+        backgroundColor: COLORS.primaryGrayHex,
+    },
+    movementBadgeText: {
+        color: COLORS.whiteHex,
+        fontSize: 12,
+        fontWeight: '600',
     },
     statusContainer: {
         backgroundColor: 'rgba(110, 110, 160, 0.3)',
