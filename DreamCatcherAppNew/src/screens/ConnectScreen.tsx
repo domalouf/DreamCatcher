@@ -209,18 +209,11 @@ const ConnectScreen = ({ navigation }: { navigation: any }) => {
                 } else {
                     // Parse timestamp,value format
                     const parts = dataString.split(',');
-                        if (parts.length === 2) {
-                            const timestamp = parseInt(parts[0]);
-                            const value = parseInt(parts[1]);
-                            const t = timestamp / 1000; // convert ms to seconds
-
-                            // Keep only the most recent 4 seconds of data to avoid excessive re-renders
-                            setQtrDataPoints(prev => {
-                                const cutoff = t - 4; // seconds
-                                const filtered = prev.filter(p => p.x >= cutoff);
-                                return [...filtered, { x: t, y: value }];
-                            });
-                        }
+                    if (parts.length === 2) {
+                        const timestamp = parseInt(parts[0]);
+                        const value = parseInt(parts[1]);
+                        setQtrDataPoints(prev => [...prev, { x: timestamp / 1000, y: value }]); // Convert ms to seconds
+                    }
                 }
             }
         }
@@ -228,7 +221,7 @@ const ConnectScreen = ({ navigation }: { navigation: any }) => {
     
     const addStatusMessage = (message: string) => {
         setStatusMessages(prev => {
-            const updated = [message, ...prev].slice(0, 3); // Keep last 3 messages
+            const updated = [message, ...prev].slice(0, 5); // Keep last 5 messages
             return updated;
         });
     };
