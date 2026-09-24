@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { AppState, StyleSheet } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -18,6 +18,16 @@ import ConnectScreen from './src/screens/ConnectScreen';
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
 
+const tabIcon = (name: React.ComponentProps<typeof Icon>['name']) =>
+  ({ color, size }: { color: string; size: number }) => (
+    <Icon name={name} size={size} color={color} />
+  );
+
+const renderTabBarBackground = () => (
+  <BlurView overlayColor='transparent' blurAmount={1}
+    style={styles.BlurViewStyle} />
+);
+
 function BottomNavBarTabs() {
   const insets = useSafeAreaInsets();
   
@@ -29,10 +39,7 @@ function BottomNavBarTabs() {
         tabBarInactiveTintColor: COLORS.primaryGrayHex,
         headerShown: false,
         tabBarStyle: [styles.tabBarStyle, { marginBottom: insets.bottom }],
-        tabBarBackground: () => (
-          <BlurView overlayColor='transparent' blurAmount={1}
-            style={styles.BlurViewStyle} />
-        ),
+        tabBarBackground: renderTabBarBackground,
       }}>
       <Tab.Screen
         name="DC"
@@ -40,9 +47,7 @@ function BottomNavBarTabs() {
         options={{
           tabBarShowLabel: false,
           tabBarLabel: 'DC',
-          tabBarIcon: ({ color, size }) => (
-            <Icon name="leaf" size={size} color={color} />
-          ),
+          tabBarIcon: tabIcon('leaf'),
         }}
       />
       <Tab.Screen
@@ -51,9 +56,7 @@ function BottomNavBarTabs() {
         options={{
           tabBarShowLabel: false,
           tabBarLabel: 'Home',
-          tabBarIcon: ({ color, size }) => (
-            <Icon name="book" size={size} color={color} />
-          ),
+          tabBarIcon: tabIcon('book'),
         }}
       />
       <Tab.Screen
@@ -62,9 +65,7 @@ function BottomNavBarTabs() {
         options={{
           tabBarShowLabel: false,
           tabBarLabel: 'Learn',
-          tabBarIcon: ({ color, size }) => (
-            <Icon name="graduation-cap" size={size} color={color} />
-          ),
+          tabBarIcon: tabIcon('graduation-cap'),
         }}
       />
       <Tab.Screen
@@ -73,9 +74,7 @@ function BottomNavBarTabs() {
         options={{
           tabBarShowLabel: false,
           tabBarLabel: 'Profile',
-          tabBarIcon: ({ color, size }) => (
-            <Icon name="user" size={size} color={color} />
-          ),
+          tabBarIcon: tabIcon('user'),
         }}
       />
     </Tab.Navigator>
@@ -142,18 +141,21 @@ function ProfileStack() {
 
 export default function App() {
   React.useEffect(() => {
-    // Enable immersive mode to hide the navigation bar
-    SystemNavigationBar.immersive().catch(() => {
-      // Fallback if immersive fails
+    // Hide the navigation bar. Sticky immersive mode lets the user swipe the bars back in
+    // temporarily and hides them again on its own, so there's no need to poll for it.
+    const hideNavigationBar = () => {
+      SystemNavigationBar.stickyImmersive().catch(() => {});
+    };
+    hideNavigationBar();
+
+    // Re-apply when returning to the app in case the system reset it while in the background
+    const subscription = AppState.addEventListener('change', state => {
+      if (state === 'active') {
+        hideNavigationBar();
+      }
     });
 
-    // Set up a timer to hide the nav bar again after 3 seconds
-    // This handles the case where the user swipes it up
-    const interval = setInterval(() => {
-      SystemNavigationBar.immersive().catch(() => {});
-    }, 3000);
-
-    return () => clearInterval(interval);
+    return () => subscription.remove();
   }, []);
 
   return (

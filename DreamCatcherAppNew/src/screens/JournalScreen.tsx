@@ -8,11 +8,9 @@ import {
     TouchableOpacity,
     TextInput,
     Modal,
-    FlatList,
     Alert,
     Image,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
 import { COLORS } from '../theme/theme';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -24,13 +22,34 @@ interface DreamEntry {
     content: string;
 }
 
-const JournalScreen = (props: any) => {
+const STORAGE_KEY = '@dream_entries_v1';
+
+// Memoized so typing in the New Entry modal doesn't re-render every card in the journal
+const EntryCard = React.memo(({ entry, onPress }: { entry: DreamEntry, onPress: (entry: DreamEntry) => void }) => (
+    <TouchableOpacity
+        style={styles.entryCard}
+        onPress={() => onPress(entry)}
+        activeOpacity={0.7}
+    >
+        <View style={styles.orangeAccent} />
+        <View style={styles.cardContent}>
+            <View style={styles.dateContainer}>
+                <Text style={styles.entryDate}>🌙 {entry.date}</Text>
+            </View>
+            <Text style={styles.entryTitle}>{entry.title}</Text>
+            <Text style={styles.entryPreview} numberOfLines={2}>
+                {entry.content}
+            </Text>
+        </View>
+    </TouchableOpacity>
+));
+
+const JournalScreen = () => {
     const [entries, setEntries] = useState<DreamEntry[]>([]);
     const [modalVisible, setModalVisible] = useState(false);
     const [dreamTitle, setDreamTitle] = useState('');
     const [dreamContent, setDreamContent] = useState('');
     const [selectedEntry, setSelectedEntry] = useState<DreamEntry | null>(null);
-    const STORAGE_KEY = '@dream_entries_v1';
 
     useEffect(() => {
         const loadEntries = async () => {
@@ -46,14 +65,11 @@ const JournalScreen = (props: any) => {
         loadEntries();
     }, []);
 
-    const persistEntries = async (updater: (prev: DreamEntry[]) => DreamEntry[]) => {
-        setEntries(prev => {
-            const next = updater(prev);
-            AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next)).catch((error: any) =>
-                console.warn('[Journal] Failed to persist entries', error),
-            );
-            return next;
-        });
+    const persistEntries = (next: DreamEntry[]) => {
+        setEntries(next);
+        AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next)).catch((error: any) =>
+            console.warn('[Journal] Failed to persist entries', error),
+        );
     };
 
     const getTodayDate = () => {
@@ -78,14 +94,14 @@ const JournalScreen = (props: any) => {
             content: dreamContent,
         };
 
-        persistEntries(prev => [newEntry, ...prev]);
+        persistEntries([newEntry, ...entries]);
         setDreamTitle('');
         setDreamContent('');
         setModalVisible(false);
     };
 
     const handleDeleteEntry = (id: string) => {
-        persistEntries(prev => prev.filter(entry => entry.id !== id));
+        persistEntries(entries.filter(entry => entry.id !== id));
         setSelectedEntry(null);
     };
 
@@ -176,23 +192,7 @@ const JournalScreen = (props: any) => {
                         ) : (
                             <View style={styles.entriesContainer}>
                                 {entries.map((item) => (
-                                    <TouchableOpacity
-                                        key={item.id}
-                                        style={styles.entryCard}
-                                        onPress={() => setSelectedEntry(item)}
-                                        activeOpacity={0.7}
-                                    >
-                                        <View style={styles.orangeAccent} />
-                                        <View style={styles.cardContent}>
-                                            <View style={styles.dateContainer}>
-                                                <Text style={styles.entryDate}>🌙 {item.date}</Text>
-                                            </View>
-                                            <Text style={styles.entryTitle}>{item.title}</Text>
-                                            <Text style={styles.entryPreview} numberOfLines={2}>
-                                                {item.content}
-                                            </Text>
-                                        </View>
-                                    </TouchableOpacity>
+                                    <EntryCard key={item.id} entry={item} onPress={setSelectedEntry} />
                                 ))}
                             </View>
                         )}
@@ -445,10 +445,6 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         opacity: 0.6,
         lineHeight: 26,
-    },
-    listContainer: {
-        paddingHorizontal: 16,
-        paddingBottom: 16,
     },
     entryCard: {
         backgroundColor: 'transparent',

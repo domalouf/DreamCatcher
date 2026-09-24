@@ -1,19 +1,20 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { View, StatusBar, Text, StyleSheet, ImageBackground, Linking } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import DateTimePicker from '@react-native-community/datetimepicker';
-import { differenceInMilliseconds } from 'date-fns';
-// stuff for ble
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
+    View,
+    StatusBar,
+    Text,
+    StyleSheet,
+    ImageBackground,
+    Linking,
     Platform,
     ScrollView,
-    NativeModules,
     TouchableOpacity,
-    NativeEventEmitter,
     PermissionsAndroid,
     TouchableHighlight,
     Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import BleManager, {
     BleDisconnectPeripheralEvent,
     BleManagerDidUpdateValueForCharacteristicEvent,
@@ -22,30 +23,150 @@ import BleManager, {
     BleScanMode,
     Peripheral,
 } from 'react-native-ble-manager';
-import { LineChart } from 'react-native-chart-kit';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { COLORS } from '../theme/theme';
+import {
+    MaskStatus,
+    NightLogReader,
+    NightReport,
+    TestSample,
+    TestSummary,
+    parseStatus,
+    parseTestSample,
+    parseTestSummary,
+} from '../ble/maskProtocol';
+import SensorTestPanel from '../components/SensorTestPanel';
+import CueSettingsPanel from '../components/CueSettingsPanel';
+import NightReportPanel from '../components/NightReportPanel';
 
-const BleManagerModule = NativeModules.BleManager;
-
-// RN expects native modules to expose addListener/removeListeners for NativeEventEmitter; stub to silence warnings until BLE work resumes.
-if (BleManagerModule && !BleManagerModule.addListener) {
-    BleManagerModule.addListener = () => {};
-}
-if (BleManagerModule && !BleManagerModule.removeListeners) {
-    BleManagerModule.removeListeners = () => {};
-}
-
-const bleManagerEmitter = new NativeEventEmitter(BleManagerModule);
 const SECONDS_TO_SCAN_FOR = 3;
-// the only uuids we are interested in
-const SERVICE_UUIDS: string[] = ['7504e3b0-fd7a-4b56-b74d-c6e7eeed3f19'];
+// the only uuids we are interested in (must match the ESP32 firmware)
 const SERVICE_UUID = '7504e3b0-fd7a-4b56-b74d-c6e7eeed3f19';
 const CHARACTERISTIC_UUID = '8b38e5b5-2b9a-4954-9281-fcab195b0912';
+const SERVICE_UUIDS: string[] = [SERVICE_UUID];
 //const SERVICE_UUIDS: string[] = [];  // temporarily empty to scan all devices
 const ALLOW_DUPLICATES = false;
 
-const ConnectScreen = ({ navigation }: { navigation: any }) => {
+const REPORTS_KEY = '@night_reports_v1';
+const MAX_SAVED_REPORTS = 30;
+const TEST_WINDOW_SAMPLES = 250;  // the sensor test graph shows the last 10 s
+const TEST_REFRESH_MS = 200;      // redraw it 5 times a second rather than for every reading
+const LOG_TIMEOUT_MS = 30000;     // give up on a night log download that stops part way
+
+const writeText = (peripheralId: string, text: string) =>
+    BleManager.write(peripheralId, SERVICE_UUID, CHARACTERISTIC_UUID, Array.from(text, c => c.charCodeAt(0)));
+
+// Keeps the last few nights on the phone, newest first
+async function saveNightReport(report: NightReport) {
+    try {
+        const stored = await AsyncStorage.getItem(REPORTS_KEY);
+        const reports: NightReport[] = stored ? JSON.parse(stored) : [];
+        const sameNight = (r: NightReport) =>
+            r.startUnix === report.startUnix && r.epochs.length === report.epochs.length && r.cues.length === report.cues.length;
+        const updated = [report, ...reports.filter(r => !sameNight(r))].slice(0, MAX_SAVED_REPORTS);
+        await AsyncStorage.setItem(REPORTS_KEY, JSON.stringify(updated));
+    } catch (error) {
+        console.warn('[saveNightReport] failed to save night report', error);
+    }
+}
+
+// How you can tap? Go sleep. Go sleep.
+function sleep(ms: number) {
+    return new Promise<void>(resolve => setTimeout(resolve, ms));
+}
+
+// The time pickers only choose a time of day and keep whatever date they were opened with,
+// so resolve the picked time to the first time that clock time comes around after `after`
+// (e.g. a 3 AM start picked at 11 PM means tomorrow at 3 AM, not a time that already passed).
+function nextOccurrence(time: Date, after: Date) {
+    const next = new Date(after);
+    next.setHours(time.getHours(), time.getMinutes(), 0, 0);
+    if (next <= after) {
+        next.setDate(next.getDate() + 1);
+    }
+    return next;
+}
+
+function secondsBetween(from: Date, to: Date) {
+    return Math.round((to.getTime() - from.getTime()) / 1000);
+}
+
+const requestAndroidPermissions = () => {
+    if (Platform.OS === 'android' && Platform.Version >= 31) {
+        PermissionsAndroid.requestMultiple([
+            PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
+            PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+        ]).then(result => {
+            const scanGranted = result[PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN] === PermissionsAndroid.RESULTS.GRANTED;
+            const connectGranted = result[PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT] === PermissionsAndroid.RESULTS.GRANTED;
+            const scanNeverAsk = result[PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN] === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN;
+            const connectNeverAsk = result[PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT] === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN;
+
+            if (scanGranted && connectGranted) {
+                console.log(
+                    '[requestAndroidPermissions] User accepts runtime permissions android 12+',
+                );
+            } else if (scanNeverAsk || connectNeverAsk) {
+                console.error('[requestAndroidPermissions] Permissions set to never ask again');
+                Alert.alert(
+                    'Permissions Required',
+                    'Bluetooth permissions are required to use this app. You previously selected "Don\'t ask again". Please enable Bluetooth permissions in your device settings.',
+                    [
+                        {
+                            text: 'Cancel',
+                            style: 'cancel',
+                        },
+                        {
+                            text: 'Open Settings',
+                            onPress: () => Linking.openSettings(),
+                        },
+                    ],
+                );
+            } else {
+                console.error(
+                    '[requestAndroidPermissions] User refuses runtime permissions android 12+',
+                );
+                Alert.alert(
+                    'Permissions Required',
+                    'Bluetooth scan and connect permissions are required to find and connect to your Dream Catcher mask. Please grant these permissions to continue.',
+                    [
+                        {
+                            text: 'OK',
+                            onPress: requestAndroidPermissions,
+                        },
+                    ],
+                );
+            }
+        });
+    } else if (Platform.OS === 'android' && Platform.Version >= 23) {
+        PermissionsAndroid.check(
+            PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+        ).then(checkResult => {
+            if (checkResult) {
+                console.log(
+                    '[requestAndroidPermissions] runtime permission Android <12 already OK',
+                );
+            } else {
+                PermissionsAndroid.request(
+                    PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+                ).then(requestResult => {
+                    if (requestResult) {
+                        console.log(
+                            '[requestAndroidPermissions] User accepts runtime permission android <12',
+                        );
+                    } else {
+                        console.error(
+                            '[requestAndroidPermissions] User refuses runtime permission android <12',
+                        );
+                    }
+                });
+            }
+        });
+    }
+};
+
+const ConnectScreen = () => {
     const [isScanning, setIsScanning] = useState(false);
     const [connectedPeripherals, setConnectedPeripherals] = useState(
         new Map<Peripheral['id'], Peripheral>(),
@@ -53,18 +174,31 @@ const ConnectScreen = ({ navigation }: { navigation: any }) => {
     const [discoveredPeripherals, setDiscoveredPeripherals] = useState(
         new Map<Peripheral['id'], Peripheral>(),
     );
-    const [peripheralReadData, setPeripheralReadData] = useState('No Data Yet');
     const [isMaskSleep, setIsMaskSleep] = useState(false);
-    
+
     const [startTimeWindow, setStartTimeWindow] = useState(new Date());
     const [endTimeWindow, setEndTimeWindow] = useState(new Date());
-    const [startTimePopOpen, setStartTimePopOpen] = useState(false);
-    const [endTimePopOpen, setEndTimePopOpen] = useState(false);
+    const [openTimePicker, setOpenTimePicker] = useState<'start' | 'end' | null>(null);
 
-    // QTR data state
-    const [qtrDataPoints, setQtrDataPoints] = useState<{x: number, y: number}[]>([]);
-    const [isCollectingQTR, setIsCollectingQTR] = useState(false);
-    
+    // Settings stored on the mask, and whether it has a night log waiting
+    const [maskStatus, setMaskStatus] = useState<MaskStatus | null>(null);
+
+    // Sensor test
+    const [testing, setTesting] = useState(false);
+    const [testSamples, setTestSamples] = useState<TestSample[]>([]);
+    const [testSummary, setTestSummary] = useState<TestSummary | null>(null);
+    const [testCounts, setTestCounts] = useState({ eye: 0, body: 0 });
+    // Refs rather than state: they're used by the BLE notification handler, which is
+    // registered once on mount and would otherwise only ever see their initial values.
+    const testingRef = useRef(false);
+    const testBuffer = useRef<TestSample[]>([]);
+
+    // Night report
+    const [nightReport, setNightReport] = useState<NightReport | null>(null);
+    const [downloading, setDownloading] = useState(false);
+    const logReader = useRef<NightLogReader | null>(null);
+    const autoDownloaded = useRef(false);
+
     // Debug/status messages
     const [statusMessages, setStatusMessages] = useState<string[]>([]);
 
@@ -91,7 +225,7 @@ const ConnectScreen = ({ navigation }: { navigation: any }) => {
                     .catch((err: any) => {
                         console.error('[startScan] ble scan returned in error', err);
                     });
-                
+
                 // Fallback timeout to ensure isScanning is reset
                 setTimeout(() => {
                     setIsScanning(false);
@@ -103,73 +237,11 @@ const ConnectScreen = ({ navigation }: { navigation: any }) => {
         }
     };
 
-    // just sets isScanning to false
-    const handleStopScan = () => {
-        setIsScanning(false);
-        console.log('[handleStopScan] scan is stopped.');
-    };
-
-    const handleDisconnectedPeripheral = (
-        event: BleDisconnectPeripheralEvent,
-    ) => {
-        console.log(
-            `[handleDisconnectedPeripheral][${event.peripheral}] disconnected.`,
-        );
+    const removeConnectedPeripheral = (id: Peripheral['id']) => {
         setConnectedPeripherals(map => {
-            return new Map(
-                Array.from(map).filter(([id, peripheral]) => id !== event.peripheral),
-            );
-        });
-    };
-
-    const handleConnectPeripheral = (event: any) => {
-        console.log(`[handleConnectPeripheral][${event.peripheral}] connected.`);
-    };
-
-    const handleUpdateValueForCharacteristic = (data: BleManagerDidUpdateValueForCharacteristicEvent) => {
-        console.log(
-            `[handleUpdateValueForCharacteristic] received data from '${data.peripheral}' with characteristic='${data.characteristic}' and value='${data.value}'`,);
-        
-        if (data.value) {
-            const dataString = String.fromCharCode(...data.value);
-            console.log('[Received]', dataString);
-            
-            // Handle acknowledgments from ESP32
-            if (dataString.startsWith('ACK:')) {
-                addStatusMessage(dataString);
-            }
-            // Handle QTR data reception
-            else if (isCollectingQTR) {
-                if (dataString === 'QTR_DATA_END') {
-                    setIsCollectingQTR(false);
-                    addStatusMessage('QTR data collection complete');
-                } else {
-                    // Parse timestamp,value format
-                    const parts = dataString.split(',');
-                    if (parts.length === 2) {
-                        const timestamp = parseInt(parts[0]);
-                        const value = parseInt(parts[1]);
-                        setQtrDataPoints(prev => [...prev, { x: timestamp / 1000, y: value }]); // Convert ms to seconds
-                    }
-                }
-            }
-        }
-    };
-    
-    const addStatusMessage = (message: string) => {
-        setStatusMessages(prev => {
-            const updated = [message, ...prev].slice(0, 5); // Keep last 5 messages
-            return updated;
-        });
-    };
-
-    const handleDiscoverPeripheral = (peripheral: Peripheral) => {
-        console.log('[handleDiscoverPeripheral] new BLE peripheral=', peripheral);
-        if (!peripheral.name) {
-            peripheral.name = 'Spooky Mystery Device';
-        }
-        setDiscoveredPeripherals(map => {
-            return new Map(map.set(peripheral.id, peripheral));
+            const newMap = new Map(map);
+            newMap.delete(id);
+            return newMap;
         });
     };
 
@@ -191,94 +263,47 @@ const ConnectScreen = ({ navigation }: { navigation: any }) => {
     // connects device to given peripheral, updates the peripherals map
     const connectPeripheral = async (peripheral: Peripheral) => {
         try {
-            if (peripheral) {
-                await BleManager.connect(peripheral.id);
-                console.log(`[connectPeripheral][${peripheral.id}] connected.`);
+            await BleManager.connect(peripheral.id);
+            console.log(`[connectPeripheral][${peripheral.id}] connected.`);
 
-                setConnectedPeripherals(map => {
-                    let p = discoveredPeripherals.get(peripheral.id);
-                    if (p) {
-                        return new Map(map.set(p.id, p));
-                    }
-                    return map;
-                });
+            setConnectedPeripherals(map => new Map(map).set(peripheral.id, peripheral));
+            setIsMaskSleep(false);
 
-                setIsMaskSleep(false);
+            // before retrieving services, it is often a good idea to let bonding & connection finish properly
+            await sleep(1500);
 
-                // before retrieving services, it is often a good idea to let bonding & connection finish properly
-                await sleep(1500);
+            // Check if still connected before proceeding
+            const isConnected = await BleManager.isPeripheralConnected(peripheral.id, []);
+            if (!isConnected) {
+                console.warn(`[connectPeripheral][${peripheral.id}] device disconnected before service retrieval`);
+                removeConnectedPeripheral(peripheral.id);
+                return;
+            }
 
-                // Check if still connected before proceeding
-                const isConnected = await BleManager.isPeripheralConnected(peripheral.id, []);
-                if (!isConnected) {
-                    console.warn(`[connectPeripheral][${peripheral.id}] device disconnected before service retrieval`);
-                    setConnectedPeripherals(map => {
-                        const newMap = new Map(map);
-                        newMap.delete(peripheral.id);
-                        return newMap;
-                    });
-                    return;
-                }
+            // services must be retrieved before notifications can be enabled
+            const peripheralData = await BleManager.retrieveServices(peripheral.id);
+            console.log(
+                `[connectPeripheral][${peripheral.id}] retrieved peripheral services`,
+                peripheralData,
+            );
 
-                /* Test read current RSSI value, retrieve services first */
-                const peripheralData = await BleManager.retrieveServices(peripheral.id);
-                console.log(
-                    `[connectPeripheral][${peripheral.id}] retrieved peripheral services`,
-                    peripheralData,
-                );
+            const rssi = await BleManager.readRSSI(peripheral.id);
+            console.log(
+                `[connectPeripheral][${peripheral.id}] retrieved current RSSI value: ${rssi}.`,
+            );
 
-                const rssi = await BleManager.readRSSI(peripheral.id);
-                console.log(
-                    `[connectPeripheral][${peripheral.id}] retrieved current RSSI value: ${rssi}.`,
-                );
+            setConnectedPeripherals(map => {
+                const p = map.get(peripheral.id);
+                return p ? new Map(map).set(p.id, { ...p, rssi }) : map;
+            });
 
-                if (peripheralData.characteristics) {
-                    for (let characteristic of peripheralData.characteristics) {
-                        if (characteristic.descriptors) {
-                            for (let descriptor of characteristic.descriptors) {
-                                try {
-                                    // strange case with my esp32 where it would not accept this descriptor
-                                    if (characteristic.characteristic === '2a05') {
-                                        break;
-                                    }
-                                    let data = await BleManager.readDescriptor(
-                                        peripheral.id,
-                                        characteristic.service,
-                                        characteristic.characteristic,
-                                        descriptor.uuid,
-                                    );
-                                    console.log(
-                                        `[connectPeripheral][${peripheral.id}] ${characteristic.service} ${characteristic.characteristic} ${descriptor.uuid} descriptor read as:`,
-                                        data,
-                                    );
-                                } catch (error) {
-                                    console.error(
-                                        `[connectPeripheral][${peripheral.id}] failed to retrieve descriptor ${descriptor} for characteristic ${characteristic}:`,
-                                        error,
-                                    );
-                                }
-                            }
-                        }
-                    }
-                }
-
-                setConnectedPeripherals(map => {
-                    let p = map.get(peripheral.id);
-                    if (p) {
-                        p.rssi = rssi;
-                        return new Map(map.set(p.id, p));
-                    }
-                    return map;
-                });
-
-                // Set up notifications for the characteristic
-                
-                try {
-                    await BleManager.startNotification(peripheral.id, SERVICE_UUID, CHARACTERISTIC_UUID);
-                    console.log(`[connectPeripheral][${peripheral.id}] notifications enabled for characteristic`);
-                } catch (error) {
-                    console.error(`[connectPeripheral][${peripheral.id}] failed to enable notifications:`, error);
-                }
+            // Set up notifications for the characteristic
+            try {
+                await BleManager.startNotification(peripheral.id, SERVICE_UUID, CHARACTERISTIC_UUID);
+                console.log(`[connectPeripheral][${peripheral.id}] notifications enabled for characteristic`);
+                await writeText(peripheral.id, 'status: get');
+            } catch (error) {
+                console.error(`[connectPeripheral][${peripheral.id}] failed to enable notifications:`, error);
             }
         } catch (error) {
             console.error(
@@ -286,136 +311,176 @@ const ConnectScreen = ({ navigation }: { navigation: any }) => {
                 error,
             );
             // Remove from connected peripherals on error
-            setConnectedPeripherals(map => {
-                const newMap = new Map(map);
-                newMap.delete(peripheral.id);
-                return newMap;
-            });
+            removeConnectedPeripheral(peripheral.id);
         }
     };
 
-    const readPeripheral = async () => {
-        try {
-            if (connectedPeripherals.size === 0) {
-                console.warn('[readPeripheral] No connected peripherals found.');
-                setPeripheralReadData('Not Connected to a peripheral');
-                return;
-            }
-
-            console.log(
-                '[readPeripheral] connectedPeripherals to scan for data',
-                Array.from(connectedPeripherals.values()),
-            );
-
-            for (const peripheral of connectedPeripherals.values()) {
-                // Now you are connected to the peripheral, and you have its services and characteristics.
-                // You can read a characteristic like this:
-                let service = 'dff3db14-65be-4e80-9852-0bbff6037651'; // replace with your service UUID
-                let characteristic = '80eb899b-b325-4120-b604-df06ec01af12'; // replace with your characteristic UUID
-                BleManager.read(peripheral.id, service, characteristic)
-                    .then(data => {
-                        // Success code
-                        console.log('Read:', data);
-                        setPeripheralReadData(data.toString());
-                    })
-                    .catch(error => {
-                        // Failure code
-                        console.log(error);
-                    });
-            }
-        } catch (error) {
-            console.error('[readPeripheral] unable to read peripheral data.', error);
+    const writePeripheral = useCallback(async (writeData: string) => {
+        if (connectedPeripherals.size === 0) {
+            console.warn('[writePeripheral] No connected peripherals found.');
+            return;
         }
-    };
 
-    const writePeripheral = async (writeData: string) => {
-        try {
-            if (connectedPeripherals.size === 0) {
-                console.warn('[writePeripheral] No connected peripherals found.');
-                return;
+        for (const peripheral of connectedPeripherals.values()) {
+            try {
+                await writeText(peripheral.id, writeData);
+                console.log(`[writePeripheral][${peripheral.id}] wrote '${writeData}'`);
+            } catch (error) {
+                console.error(`[writePeripheral][${peripheral.id}] failed to write '${writeData}'`, error);
             }
-
-            console.log(
-                '[writePeripheral] connectedPeripherals to write data to',
-                Array.from(connectedPeripherals.values()),
-            );
-
-            let asciiArray = [];
-
-            for (let i = 0; i < writeData.length; i++) {
-                asciiArray.push(writeData.charCodeAt(i));
-            }
-
-            for (const peripheral of connectedPeripherals.values()) {
-                // Now you are connected to the peripheral, and you have its services and characteristics.
-                // You can read a characteristic like this:
-                let service = '7504e3b0-fd7a-4b56-b74d-c6e7eeed3f19'; // replace with your service UUID
-                let characteristic = '8b38e5b5-2b9a-4954-9281-fcab195b0912'; // replace with your characteristic UUID
-                BleManager.write(
-                    peripheral.id,
-                    service,
-                    characteristic,
-                    asciiArray,
-                )
-                    .then(() => {
-                        console.log("Wrote " + writeData + " to characteristic " + characteristic);
-                    })
-                    .catch(error => {
-                        console.error(
-                            'Failed to write data to characteristic ' + characteristic,
-                            error,
-                        );
-                    });
-            }
-        } catch (error) {
-            console.error('[writePeripheral] unable to write peripheral data.', error);
         }
-    };
+    }, [connectedPeripherals]);
 
     // sends esp32 a set of strings that represent the time window
+    // now: [the phone's clock, in unix seconds, so the night log has real times]
     // startTime: [time in seconds]
     // scanTime: [time in seconds]
     // startTime is the number of seconds to sleep right now before checking for REM
     // scanTime is the number of seconds to check for REM
-    const sendTimeInfo = () => {
-        var startTime = (differenceInMilliseconds(startTimeWindow, new Date()) / 1000).toString();
-        writePeripheral("startTime: " + parseInt(startTime));
+    const sendTimeInfo = async () => {
+        if (startTimeWindow.getHours() === endTimeWindow.getHours() &&
+            startTimeWindow.getMinutes() === endTimeWindow.getMinutes()) {
+            Alert.alert('Invalid Time Window', 'Please pick different start and end times.');
+            return;
+        }
 
-        var scanTime = (differenceInMilliseconds(endTimeWindow, startTimeWindow) / 1000).toString();
-        writePeripheral("scanTime: " + scanTime);
+        const now = new Date();
+        const start = nextOccurrence(startTimeWindow, now);
+        const end = nextOccurrence(endTimeWindow, start);
+
+        await writePeripheral('now: ' + Math.round(now.getTime() / 1000));
+        await writePeripheral('startTime: ' + secondsBetween(now, start));
+        await writePeripheral('scanTime: ' + secondsBetween(start, end));
 
         setIsMaskSleep(true);
     };
 
-    // How you can tap? Go sleep. Go sleep.
-    function sleep(ms: number) {
-        return new Promise<void>(resolve => setTimeout(resolve, ms));
-    }
-
     // initializes the BleManager and sets up event listeners
     useEffect(() => {
+        const addStatusMessage = (message: string) => {
+            setStatusMessages(prev => [message, ...prev].slice(0, 5)); // Keep last 5 messages
+        };
+
+        const handleDiscoverPeripheral = (peripheral: Peripheral) => {
+            console.log('[handleDiscoverPeripheral] new BLE peripheral=', peripheral);
+            if (!peripheral.name) {
+                peripheral.name = 'Spooky Mystery Device';
+            }
+            setDiscoveredPeripherals(map => new Map(map).set(peripheral.id, peripheral));
+        };
+
+        // just sets isScanning to false
+        const handleStopScan = () => {
+            setIsScanning(false);
+            console.log('[handleStopScan] scan is stopped.');
+        };
+
+        const handleDisconnectedPeripheral = (event: BleDisconnectPeripheralEvent) => {
+            console.log(
+                `[handleDisconnectedPeripheral][${event.peripheral}] disconnected.`,
+            );
+            setConnectedPeripherals(map => {
+                const newMap = new Map(map);
+                newMap.delete(event.peripheral);
+                return newMap;
+            });
+            testingRef.current = false;
+            setTesting(false);
+            setMaskStatus(null);
+            setDownloading(false);
+            logReader.current = null;
+            autoDownloaded.current = false;
+        };
+
+        const requestNightLog = (peripheralId: string) => {
+            setDownloading(true);
+            writeText(peripheralId, 'log: get').catch(error => {
+                console.error('[requestNightLog] failed to request the night log', error);
+                setDownloading(false);
+            });
+        };
+
+        const handleUpdateValueForCharacteristic = (data: BleManagerDidUpdateValueForCharacteristicEvent) => {
+            if (!data.value) {
+                return;
+            }
+            const dataString = String.fromCharCode(...data.value);
+            console.log(`[handleUpdateValueForCharacteristic][${data.peripheral}] received '${dataString}'`);
+
+            // Handle acknowledgments from ESP32
+            if (dataString.startsWith('ACK:')) {
+                addStatusMessage(dataString);
+                return;
+            }
+
+            const status = parseStatus(dataString);
+            if (status) {
+                setMaskStatus(status);
+                // Collect the night's report as soon as the mask has one
+                if (status.hasLog && !autoDownloaded.current) {
+                    autoDownloaded.current = true;
+                    requestNightLog(data.peripheral);
+                }
+                return;
+            }
+
+            // Night log download
+            if (dataString === 'LOG_NONE') {
+                setDownloading(false);
+                addStatusMessage('No night recorded on the mask yet');
+                return;
+            }
+            if (dataString.startsWith('LOG:')) {
+                logReader.current = new NightLogReader();
+            }
+            if (logReader.current && NightLogReader.isLogMessage(dataString)) {
+                const report = logReader.current.add(dataString);
+                if (report) {
+                    logReader.current = null;
+                    setNightReport(report);
+                    setDownloading(false);
+                    addStatusMessage('Night report downloaded');
+                    saveNightReport(report);
+                }
+                return;
+            }
+
+            // Sensor test
+            if (dataString === 'TEST_END') {
+                testingRef.current = false;
+                setTesting(false);
+                return;
+            }
+            const summary = parseTestSummary(dataString);
+            if (summary) {
+                setTestSummary(summary);
+                return;
+            }
+            const sample = parseTestSample(dataString);
+            if (sample && testingRef.current) {
+                testBuffer.current.push(sample);
+            }
+        };
+
         try {
             BleManager.start({ showAlert: false })
                 .then(() => console.log('BleManager started.'))
                 .catch((error: any) =>
-                    console.error('BeManager could not be started.', error),
+                    console.error('BleManager could not be started.', error),
                 );
         } catch (error) {
             console.error('unexpected error starting BleManager.', error);
             return;
         }
 
-        const listeners: any[] = [
+        const listeners = [
             BleManager.onDiscoverPeripheral(handleDiscoverPeripheral),
             BleManager.onStopScan(handleStopScan),
-            BleManager.onConnectPeripheral(handleConnectPeripheral),
-            BleManager.onDidUpdateValueForCharacteristic(
-                handleUpdateValueForCharacteristic
-            ),
+            BleManager.onDidUpdateValueForCharacteristic(handleUpdateValueForCharacteristic),
             BleManager.onDisconnectPeripheral(handleDisconnectedPeripheral),
         ];
 
-        handleAndroidPermissions();
+        requestAndroidPermissions();
 
         return () => {
             console.log('[app] main component unmounting. Removing listeners...');
@@ -423,80 +488,98 @@ const ConnectScreen = ({ navigation }: { navigation: any }) => {
                 listener.remove();
             }
         };
-    }, [isCollectingQTR]);
+    }, []);
 
-    const handleAndroidPermissions = () => {
-        if (Platform.OS === 'android' && Platform.Version >= 31) {
-            PermissionsAndroid.requestMultiple([
-                PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
-                PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
-            ]).then(result => {
-                const scanGranted = result[PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN] === PermissionsAndroid.RESULTS.GRANTED;
-                const connectGranted = result[PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT] === PermissionsAndroid.RESULTS.GRANTED;
-                const scanNeverAsk = result[PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN] === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN;
-                const connectNeverAsk = result[PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT] === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN;
-                
-                if (scanGranted && connectGranted) {
-                    console.log(
-                        '[handleAndroidPermissions] User accepts runtime permissions android 12+',
-                    );
-                } else if (scanNeverAsk || connectNeverAsk) {
-                    console.error('[handleAndroidPermissions] Permissions set to never ask again');
-                    Alert.alert(
-                        'Permissions Required',
-                        'Bluetooth permissions are required to use this app. You previously selected "Don\'t ask again". Please enable Bluetooth permissions in your device settings.',
-                        [
-                            {
-                                text: 'Cancel',
-                                style: 'cancel',
-                            },
-                            {
-                                text: 'Open Settings',
-                                onPress: () => Linking.openSettings(),
-                            },
-                        ],
-                    );
-                } else {
-                    console.error(
-                        '[handleAndroidPermissions] User refuses runtime permissions android 12+',
-                    );
-                    Alert.alert(
-                        'Permissions Required',
-                        'Bluetooth scan and connect permissions are required to find and connect to your Dream Catcher mask. Please grant these permissions to continue.',
-                        [
-                            {
-                                text: 'OK',
-                                onPress: handleAndroidPermissions,
-                            },
-                        ],
-                    );
+    // Show the last saved night report until a new one is downloaded
+    useEffect(() => {
+        AsyncStorage.getItem(REPORTS_KEY)
+            .then(stored => {
+                const reports: NightReport[] = stored ? JSON.parse(stored) : [];
+                if (reports.length > 0) {
+                    setNightReport(current => current ?? reports[0]);
                 }
-            });
-        } else if (Platform.OS === 'android' && Platform.Version >= 23) {
-            PermissionsAndroid.check(
-                PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-            ).then(checkResult => {
-                if (checkResult) {
-                    console.log(
-                        '[handleAndroidPermissions] runtime permission Android <12 already OK',
-                    );
-                } else {
-                    PermissionsAndroid.request(
-                        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-                    ).then(requestResult => {
-                        if (requestResult) {
-                            console.log(
-                                '[handleAndroidPermissions] User accepts runtime permission android <12',
-                            );
-                        } else {
-                            console.error(
-                                '[handleAndroidPermissions] User refuses runtime permission android <12',
-                            );
-                        }
-                    });
-                }
-            });
+            })
+            .catch(error => console.warn('[ConnectScreen] failed to load night reports', error));
+    }, []);
+
+    // Re-enable the download button if the log stops arriving part way through
+    useEffect(() => {
+        if (!downloading) {
+            return;
         }
+        const timeout = setTimeout(() => {
+            logReader.current = null;
+            setDownloading(false);
+        }, LOG_TIMEOUT_MS);
+        return () => clearTimeout(timeout);
+    }, [downloading]);
+
+    // Sensor test readings arrive 25 times a second; add them to the graph in batches
+    useEffect(() => {
+        if (!testing) {
+            return;
+        }
+        const flush = () => {
+            const batch = testBuffer.current;
+            if (batch.length === 0) {
+                return;
+            }
+            testBuffer.current = [];
+            setTestSamples(prev => [...prev, ...batch].slice(-TEST_WINDOW_SAMPLES));
+            setTestCounts(prev => ({
+                eye: prev.eye + batch.filter(s => s.movement === 1).length,
+                body: prev.body + batch.filter(s => s.movement === 2).length,
+            }));
+        };
+        const interval = setInterval(flush, TEST_REFRESH_MS);
+        return () => {
+            clearInterval(interval);
+            flush();
+        };
+    }, [testing]);
+
+    const startTest = useCallback(() => {
+        testBuffer.current = [];
+        setTestSamples([]);
+        setTestSummary(null);
+        setTestCounts({ eye: 0, body: 0 });
+        testingRef.current = true;
+        setTesting(true);
+        writePeripheral('test: start');
+    }, [writePeripheral]);
+
+    const stopTest = useCallback(() => {
+        testingRef.current = false;
+        setTesting(false);
+        writePeripheral('test: stop');
+    }, [writePeripheral]);
+
+    const downloadNightLog = useCallback(() => {
+        setDownloading(true);
+        writePeripheral('log: get');
+    }, [writePeripheral]);
+
+    const previewCue = useCallback(() => writePeripheral('cue: preview'), [writePeripheral]);
+
+    const changeCueLevel = useCallback((cueLevel: number) => {
+        setMaskStatus(status => status && { ...status, cueLevel });
+        writePeripheral(`cue: ${cueLevel}`);
+    }, [writePeripheral]);
+
+    const changeSensitivity = useCallback((sensitivity: number) => {
+        setMaskStatus(status => status && { ...status, sensitivity });
+        writePeripheral(`sens: ${sensitivity}`);
+    }, [writePeripheral]);
+
+    const onTimePicked = (event: DateTimePickerEvent, selectedDate?: Date) => {
+        if (event.type === 'set' && selectedDate) {
+            if (openTimePicker === 'start') {
+                setStartTimeWindow(selectedDate);
+            } else {
+                setEndTimeWindow(selectedDate);
+            }
+        }
+        setOpenTimePicker(null);
     };
 
     const renderItem = ({ item }: { item: Peripheral }) => {
@@ -521,109 +604,19 @@ const ConnectScreen = ({ navigation }: { navigation: any }) => {
         );
     };
 
-    const StartTimePopUp = () => {
-        return startTimePopOpen ? (
-            <DateTimePicker
-                value={startTimeWindow}
-                mode="time"
-                display="spinner"
-                onChange={(event, selectedDate) => {
-                    if (event.type === 'set' && selectedDate) {
-                        setStartTimeWindow(selectedDate);
-                        setStartTimePopOpen(false);
-                    } else {
-                        setStartTimePopOpen(false);
-                    }
-                }}
-            />
-        ) : null;
-    };
-
-    const EndTimePopUp = () => {
-        return endTimePopOpen ? (
-            <DateTimePicker
-                value={endTimeWindow}
-                mode="time"
-                display="spinner"
-                onChange={(event, selectedDate) => {
-                    if (event.type === 'set' && selectedDate) {
-                        setEndTimeWindow(selectedDate);
-                        setEndTimePopOpen(false);
-                    } else {
-                        setEndTimePopOpen(false);
-                    }
-                }}
-            />
-        ) : null;
-    };
-
-    // Render status messages
-    const StatusMessages = () => {
-        if (statusMessages.length === 0) {
-            return null;
-        }
-        
-        return (
-            <View style={styles.statusContainer}>
-                <Text style={styles.sectionTitle}>Connection Status</Text>
-                {statusMessages.map((msg, index) => (
-                    <Text key={index} style={styles.statusMessage}>{msg}</Text>
-                ))}
-            </View>
-        );
-    };
-
-    // Render QTR graph if data is available
-    const QTRGraphDisplay = () => {
-        if (qtrDataPoints.length === 0) {
-            return null;
-        }
-
-        // Prepare data for chart - show only whole integer seconds
-        const chartData = {
-            labels: qtrDataPoints.map((p) => (Math.abs(p.x - Math.round(p.x)) < 0.05 ? Math.round(p.x).toString() : '')),
-            datasets: [
-                {
-                    data: qtrDataPoints.map(p => p.y),
-                    color: () => COLORS.primaryPurpleHex,
-                }
-            ]
-        };
-
-        return (
-            <View style={styles.graphContainer}>
-                <Text style={styles.sectionTitle}>IR Sensor Data</Text>
-                <LineChart
-                    data={chartData}
-                    width={350}
-                    height={220}
-                    withInnerLines={false}
-                    chartConfig={{
-                        backgroundColor: COLORS.tirtiaryBlueHex,
-                        backgroundGradientFrom: COLORS.tirtiaryBlueHex,
-                        backgroundGradientTo: COLORS.tirtiaryBlueHex,
-                        color: () => COLORS.whiteHex,
-                        strokeWidth: 2,
-                        useShadowColorFromDataset: false,
-                    }}
-                    style={styles.chart}
-                />
-                <TouchableOpacity
-                    onPress={() => setQtrDataPoints([])}
-                    style={styles.clearButton}>
-                    <Text style={styles.scanButtonText}>Clear Graph</Text>
-                </TouchableOpacity>
-            </View>
-        );
-    };
-
     return (
         <>
             <StatusBar barStyle="default" />
             <SafeAreaView style={styles.screenContainer} edges={['top', 'left', 'right']}>
-                <StartTimePopUp />
-                <EndTimePopUp />
-                <ImageBackground source={require('../../src/images/starBackground.png')}
+                {openTimePicker && (
+                    <DateTimePicker
+                        value={openTimePicker === 'start' ? startTimeWindow : endTimeWindow}
+                        mode="time"
+                        display="spinner"
+                        onChange={onTimePicked}
+                    />
+                )}
+                <ImageBackground source={require('../images/starBackground.jpg')}
                     style={styles.bgImage}>
 
                     <Text style={styles.title}>Dream Catcher</Text>
@@ -640,7 +633,7 @@ const ConnectScreen = ({ navigation }: { navigation: any }) => {
                         style={styles.scrollContainer}
                         contentContainerStyle={styles.scrollContent}
                         showsVerticalScrollIndicator={true}>
-                        {Array.from(connectedPeripherals.values()).length === 0 ? (
+                        {connectedPeripherals.size === 0 ? (
                             <Text style={styles.statusText}>Not Connected</Text>
                         ) : (
                             <Text style={styles.statusText}>Connected</Text>
@@ -652,7 +645,7 @@ const ConnectScreen = ({ navigation }: { navigation: any }) => {
                             <View key={item.id}>{renderItem({ item })}</View>
                         ))}
 
-                        {Array.from(connectedPeripherals.values()).length > 0 && (
+                        {connectedPeripherals.size > 0 && (
                             <>
                                 {isMaskSleep ? (
                                     <Text style={styles.statusText}>Mask is Asleep</Text>
@@ -662,8 +655,15 @@ const ConnectScreen = ({ navigation }: { navigation: any }) => {
 
                                 <View style={styles.controlsContainer}>
                                     <Text style={styles.sectionTitle}>LED Controls</Text>
-                                    
-                                    <StatusMessages />
+
+                                    {statusMessages.length > 0 && (
+                                        <View style={styles.statusContainer}>
+                                            <Text style={styles.sectionTitle}>Connection Status</Text>
+                                            {statusMessages.map((msg, index) => (
+                                                <Text key={index} style={styles.statusMessage}>{msg}</Text>
+                                            ))}
+                                        </View>
+                                    )}
 
                                     <View style={styles.buttonRow}>
                                         <TouchableOpacity
@@ -683,25 +683,27 @@ const ConnectScreen = ({ navigation }: { navigation: any }) => {
                                         <Text style={styles.scanButtonText}>Do a Trick</Text>
                                     </TouchableOpacity>
 
-                                    <Text style={styles.sectionTitle}>QTR Sensor Controls</Text>
-                                    <View style={styles.buttonRow}>
-                                        <TouchableOpacity
-                                            onPress={() => {
-                                                setQtrDataPoints([]);
-                                                setIsCollectingQTR(true);
-                                                writePeripheral('qtr: collect');
-                                            }}
-                                            style={[styles.controlButton, styles.buttonSmall]}>
-                                            <Text style={styles.scanButtonText}>QTR Collect</Text>
-                                        </TouchableOpacity>
-                                    </View>
+                                    <CueSettingsPanel
+                                        status={maskStatus}
+                                        onChangeCueLevel={changeCueLevel}
+                                        onChangeSensitivity={changeSensitivity}
+                                        onPreview={previewCue}
+                                    />
 
-                                    <QTRGraphDisplay />
+                                    <SensorTestPanel
+                                        testing={testing}
+                                        samples={testSamples}
+                                        summary={testSummary}
+                                        eyeCount={testCounts.eye}
+                                        bodyCount={testCounts.body}
+                                        onStart={startTest}
+                                        onStop={stopTest}
+                                    />
 
                                     <Text style={styles.sectionTitle}>Time Window</Text>
                                     <View style={styles.timeContainer}>
                                         <TouchableOpacity
-                                            onPress={() => setStartTimePopOpen(true)}
+                                            onPress={() => setOpenTimePicker('start')}
                                             style={styles.controlButton}>
                                             <Text style={styles.scanButtonText}>Set Start Time</Text>
                                         </TouchableOpacity>
@@ -712,7 +714,7 @@ const ConnectScreen = ({ navigation }: { navigation: any }) => {
 
                                     <View style={styles.timeContainer}>
                                         <TouchableOpacity
-                                            onPress={() => setEndTimePopOpen(true)}
+                                            onPress={() => setOpenTimePicker('end')}
                                             style={styles.controlButton}>
                                             <Text style={styles.scanButtonText}>Set End Time</Text>
                                         </TouchableOpacity>
@@ -722,13 +724,22 @@ const ConnectScreen = ({ navigation }: { navigation: any }) => {
                                     </View>
 
                                     <TouchableOpacity
-                                        onPress={() => sendTimeInfo()}
+                                        onPress={sendTimeInfo}
                                         style={styles.submitButton}>
                                         <Text style={styles.scanButtonText}>Submit Time Window</Text>
                                     </TouchableOpacity>
                                 </View>
                             </>
                         )}
+
+                        <View style={styles.controlsContainer}>
+                            <NightReportPanel
+                                report={nightReport}
+                                canDownload={connectedPeripherals.size > 0 && !!maskStatus?.hasLog}
+                                downloading={downloading}
+                                onDownload={downloadNightLog}
+                            />
+                        </View>
                     </ScrollView>
                 </ImageBackground>
             </SafeAreaView>
@@ -823,34 +834,6 @@ const styles = StyleSheet.create({
         margin: 10,
         alignItems: 'center',
     },
-    secretButton: {
-        backgroundColor: COLORS.whiteHex,
-        padding: 10,
-        borderRadius: 10,
-        margin: 20,
-        position: 'absolute',
-        bottom: 50,
-        right: 10,
-    },
-    graphContainer: {
-        marginTop: 20,
-        marginBottom: 20,
-        alignItems: 'center',
-        borderRadius: 10,
-        backgroundColor: 'rgba(110, 110, 160, 0.3)',
-        padding: 10,
-    },
-    chart: {
-        borderRadius: 16,
-        marginVertical: 10,
-    },
-    clearButton: {
-        backgroundColor: COLORS.primaryPurpleHex,
-        padding: 10,
-        borderRadius: 10,
-        marginTop: 10,
-        alignItems: 'center',
-    },
     statusContainer: {
         backgroundColor: 'rgba(110, 110, 160, 0.3)',
         borderRadius: 10,
@@ -880,9 +863,6 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         padding: 2,
         paddingBottom: 20,
-    },
-    navBarOffset: {
-        marginTop: 80,
     },
     row: {
         marginLeft: 10,
