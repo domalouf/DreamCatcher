@@ -23,9 +23,22 @@ import BleManager, {
     BleScanMode,
     Peripheral,
 } from 'react-native-ble-manager';
-import { LineChart } from 'react-native-chart-kit';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { COLORS } from '../theme/theme';
+import {
+    MaskStatus,
+    NightLogReader,
+    NightReport,
+    TestSample,
+    TestSummary,
+    parseStatus,
+    parseTestSample,
+    parseTestSummary,
+} from '../ble/maskProtocol';
+import SensorTestPanel from '../components/SensorTestPanel';
+import CueSettingsPanel from '../components/CueSettingsPanel';
+import NightReportPanel from '../components/NightReportPanel';
 
 const SECONDS_TO_SCAN_FOR = 3;
 // the only uuids we are interested in (must match the ESP32 firmware)
@@ -35,7 +48,28 @@ const SERVICE_UUIDS: string[] = [SERVICE_UUID];
 //const SERVICE_UUIDS: string[] = [];  // temporarily empty to scan all devices
 const ALLOW_DUPLICATES = false;
 
-type QTRPoint = { x: number, y: number };
+const REPORTS_KEY = '@night_reports_v1';
+const MAX_SAVED_REPORTS = 30;
+const TEST_WINDOW_SAMPLES = 250;  // the sensor test graph shows the last 10 s
+const TEST_REFRESH_MS = 200;      // redraw it 5 times a second rather than for every reading
+const LOG_TIMEOUT_MS = 30000;     // give up on a night log download that stops part way
+
+const writeText = (peripheralId: string, text: string) =>
+    BleManager.write(peripheralId, SERVICE_UUID, CHARACTERISTIC_UUID, Array.from(text, c => c.charCodeAt(0)));
+
+// Keeps the last few nights on the phone, newest first
+async function saveNightReport(report: NightReport) {
+    try {
+        const stored = await AsyncStorage.getItem(REPORTS_KEY);
+        const reports: NightReport[] = stored ? JSON.parse(stored) : [];
+        const sameNight = (r: NightReport) =>
+            r.startUnix === report.startUnix && r.epochs.length === report.epochs.length && r.cues.length === report.cues.length;
+        const updated = [report, ...reports.filter(r => !sameNight(r))].slice(0, MAX_SAVED_REPORTS);
+        await AsyncStorage.setItem(REPORTS_KEY, JSON.stringify(updated));
+    } catch (error) {
+        console.warn('[saveNightReport] failed to save night report', error);
+    }
+}
 
 // How you can tap? Go sleep. Go sleep.
 function sleep(ms: number) {
@@ -132,49 +166,6 @@ const requestAndroidPermissions = () => {
     }
 };
 
-const CHART_CONFIG = {
-    backgroundColor: COLORS.tirtiaryBlueHex,
-    backgroundGradientFrom: COLORS.tirtiaryBlueHex,
-    backgroundGradientTo: COLORS.tirtiaryBlueHex,
-    color: () => COLORS.whiteHex,
-    strokeWidth: 2,
-    useShadowColorFromDataset: false,
-};
-
-// Lives outside ConnectScreen (and is memoized) so the chart is updated in place when new
-// points arrive, instead of being torn down and rebuilt on every render of the screen.
-const QTRGraph = React.memo(({ points, onClear }: { points: QTRPoint[], onClear: () => void }) => {
-    // show only whole integer seconds
-    const chartData = {
-        labels: points.map((p) => (Math.abs(p.x - Math.round(p.x)) < 0.05 ? Math.round(p.x).toString() : '')),
-        datasets: [
-            {
-                data: points.map(p => p.y),
-                color: () => COLORS.primaryPurpleHex,
-            },
-        ],
-    };
-
-    return (
-        <View style={styles.graphContainer}>
-            <Text style={styles.sectionTitle}>IR Sensor Data</Text>
-            <LineChart
-                data={chartData}
-                width={350}
-                height={220}
-                withInnerLines={false}
-                chartConfig={CHART_CONFIG}
-                style={styles.chart}
-            />
-            <TouchableOpacity
-                onPress={onClear}
-                style={styles.clearButton}>
-                <Text style={styles.scanButtonText}>Clear Graph</Text>
-            </TouchableOpacity>
-        </View>
-    );
-});
-
 const ConnectScreen = () => {
     const [isScanning, setIsScanning] = useState(false);
     const [connectedPeripherals, setConnectedPeripherals] = useState(
@@ -189,16 +180,27 @@ const ConnectScreen = () => {
     const [endTimeWindow, setEndTimeWindow] = useState(new Date());
     const [openTimePicker, setOpenTimePicker] = useState<'start' | 'end' | null>(null);
 
-    // QTR data state
-    const [qtrDataPoints, setQtrDataPoints] = useState<QTRPoint[]>([]);
-    // A ref rather than state: it is only read by the BLE notification handler, which is
-    // registered once on mount and would otherwise only ever see the initial value.
-    const isCollectingQTR = useRef(false);
+    // Settings stored on the mask, and whether it has a night log waiting
+    const [maskStatus, setMaskStatus] = useState<MaskStatus | null>(null);
+
+    // Sensor test
+    const [testing, setTesting] = useState(false);
+    const [testSamples, setTestSamples] = useState<TestSample[]>([]);
+    const [testSummary, setTestSummary] = useState<TestSummary | null>(null);
+    const [testCounts, setTestCounts] = useState({ eye: 0, body: 0 });
+    // Refs rather than state: they're used by the BLE notification handler, which is
+    // registered once on mount and would otherwise only ever see their initial values.
+    const testingRef = useRef(false);
+    const testBuffer = useRef<TestSample[]>([]);
+
+    // Night report
+    const [nightReport, setNightReport] = useState<NightReport | null>(null);
+    const [downloading, setDownloading] = useState(false);
+    const logReader = useRef<NightLogReader | null>(null);
+    const autoDownloaded = useRef(false);
 
     // Debug/status messages
     const [statusMessages, setStatusMessages] = useState<string[]>([]);
-
-    const clearQtrData = useCallback(() => setQtrDataPoints([]), []);
 
     const startScan = () => {
         console.log('[startScan] called.');
@@ -299,6 +301,7 @@ const ConnectScreen = () => {
             try {
                 await BleManager.startNotification(peripheral.id, SERVICE_UUID, CHARACTERISTIC_UUID);
                 console.log(`[connectPeripheral][${peripheral.id}] notifications enabled for characteristic`);
+                await writeText(peripheral.id, 'status: get');
             } catch (error) {
                 console.error(`[connectPeripheral][${peripheral.id}] failed to enable notifications:`, error);
             }
@@ -312,25 +315,24 @@ const ConnectScreen = () => {
         }
     };
 
-    const writePeripheral = async (writeData: string) => {
+    const writePeripheral = useCallback(async (writeData: string) => {
         if (connectedPeripherals.size === 0) {
             console.warn('[writePeripheral] No connected peripherals found.');
             return;
         }
 
-        const asciiArray = Array.from(writeData, c => c.charCodeAt(0));
-
         for (const peripheral of connectedPeripherals.values()) {
             try {
-                await BleManager.write(peripheral.id, SERVICE_UUID, CHARACTERISTIC_UUID, asciiArray);
+                await writeText(peripheral.id, writeData);
                 console.log(`[writePeripheral][${peripheral.id}] wrote '${writeData}'`);
             } catch (error) {
                 console.error(`[writePeripheral][${peripheral.id}] failed to write '${writeData}'`, error);
             }
         }
-    };
+    }, [connectedPeripherals]);
 
     // sends esp32 a set of strings that represent the time window
+    // now: [the phone's clock, in unix seconds, so the night log has real times]
     // startTime: [time in seconds]
     // scanTime: [time in seconds]
     // startTime is the number of seconds to sleep right now before checking for REM
@@ -346,6 +348,7 @@ const ConnectScreen = () => {
         const start = nextOccurrence(startTimeWindow, now);
         const end = nextOccurrence(endTimeWindow, start);
 
+        await writePeripheral('now: ' + Math.round(now.getTime() / 1000));
         await writePeripheral('startTime: ' + secondsBetween(now, start));
         await writePeripheral('scanTime: ' + secondsBetween(start, end));
 
@@ -381,6 +384,20 @@ const ConnectScreen = () => {
                 newMap.delete(event.peripheral);
                 return newMap;
             });
+            testingRef.current = false;
+            setTesting(false);
+            setMaskStatus(null);
+            setDownloading(false);
+            logReader.current = null;
+            autoDownloaded.current = false;
+        };
+
+        const requestNightLog = (peripheralId: string) => {
+            setDownloading(true);
+            writeText(peripheralId, 'log: get').catch(error => {
+                console.error('[requestNightLog] failed to request the night log', error);
+                setDownloading(false);
+            });
         };
 
         const handleUpdateValueForCharacteristic = (data: BleManagerDidUpdateValueForCharacteristicEvent) => {
@@ -393,21 +410,55 @@ const ConnectScreen = () => {
             // Handle acknowledgments from ESP32
             if (dataString.startsWith('ACK:')) {
                 addStatusMessage(dataString);
+                return;
             }
-            // Handle QTR data reception
-            else if (isCollectingQTR.current) {
-                if (dataString === 'QTR_DATA_END') {
-                    isCollectingQTR.current = false;
-                    addStatusMessage('QTR data collection complete');
-                } else {
-                    // Parse timestamp,value format
-                    const parts = dataString.split(',');
-                    if (parts.length === 2) {
-                        const timestamp = parseInt(parts[0], 10);
-                        const value = parseInt(parts[1], 10);
-                        setQtrDataPoints(prev => [...prev, { x: timestamp / 1000, y: value }]); // Convert ms to seconds
-                    }
+
+            const status = parseStatus(dataString);
+            if (status) {
+                setMaskStatus(status);
+                // Collect the night's report as soon as the mask has one
+                if (status.hasLog && !autoDownloaded.current) {
+                    autoDownloaded.current = true;
+                    requestNightLog(data.peripheral);
                 }
+                return;
+            }
+
+            // Night log download
+            if (dataString === 'LOG_NONE') {
+                setDownloading(false);
+                addStatusMessage('No night recorded on the mask yet');
+                return;
+            }
+            if (dataString.startsWith('LOG:')) {
+                logReader.current = new NightLogReader();
+            }
+            if (logReader.current && NightLogReader.isLogMessage(dataString)) {
+                const report = logReader.current.add(dataString);
+                if (report) {
+                    logReader.current = null;
+                    setNightReport(report);
+                    setDownloading(false);
+                    addStatusMessage('Night report downloaded');
+                    saveNightReport(report);
+                }
+                return;
+            }
+
+            // Sensor test
+            if (dataString === 'TEST_END') {
+                testingRef.current = false;
+                setTesting(false);
+                return;
+            }
+            const summary = parseTestSummary(dataString);
+            if (summary) {
+                setTestSummary(summary);
+                return;
+            }
+            const sample = parseTestSample(dataString);
+            if (sample && testingRef.current) {
+                testBuffer.current.push(sample);
             }
         };
 
@@ -438,6 +489,87 @@ const ConnectScreen = () => {
             }
         };
     }, []);
+
+    // Show the last saved night report until a new one is downloaded
+    useEffect(() => {
+        AsyncStorage.getItem(REPORTS_KEY)
+            .then(stored => {
+                const reports: NightReport[] = stored ? JSON.parse(stored) : [];
+                if (reports.length > 0) {
+                    setNightReport(current => current ?? reports[0]);
+                }
+            })
+            .catch(error => console.warn('[ConnectScreen] failed to load night reports', error));
+    }, []);
+
+    // Re-enable the download button if the log stops arriving part way through
+    useEffect(() => {
+        if (!downloading) {
+            return;
+        }
+        const timeout = setTimeout(() => {
+            logReader.current = null;
+            setDownloading(false);
+        }, LOG_TIMEOUT_MS);
+        return () => clearTimeout(timeout);
+    }, [downloading]);
+
+    // Sensor test readings arrive 25 times a second; add them to the graph in batches
+    useEffect(() => {
+        if (!testing) {
+            return;
+        }
+        const flush = () => {
+            const batch = testBuffer.current;
+            if (batch.length === 0) {
+                return;
+            }
+            testBuffer.current = [];
+            setTestSamples(prev => [...prev, ...batch].slice(-TEST_WINDOW_SAMPLES));
+            setTestCounts(prev => ({
+                eye: prev.eye + batch.filter(s => s.movement === 1).length,
+                body: prev.body + batch.filter(s => s.movement === 2).length,
+            }));
+        };
+        const interval = setInterval(flush, TEST_REFRESH_MS);
+        return () => {
+            clearInterval(interval);
+            flush();
+        };
+    }, [testing]);
+
+    const startTest = useCallback(() => {
+        testBuffer.current = [];
+        setTestSamples([]);
+        setTestSummary(null);
+        setTestCounts({ eye: 0, body: 0 });
+        testingRef.current = true;
+        setTesting(true);
+        writePeripheral('test: start');
+    }, [writePeripheral]);
+
+    const stopTest = useCallback(() => {
+        testingRef.current = false;
+        setTesting(false);
+        writePeripheral('test: stop');
+    }, [writePeripheral]);
+
+    const downloadNightLog = useCallback(() => {
+        setDownloading(true);
+        writePeripheral('log: get');
+    }, [writePeripheral]);
+
+    const previewCue = useCallback(() => writePeripheral('cue: preview'), [writePeripheral]);
+
+    const changeCueLevel = useCallback((cueLevel: number) => {
+        setMaskStatus(status => status && { ...status, cueLevel });
+        writePeripheral(`cue: ${cueLevel}`);
+    }, [writePeripheral]);
+
+    const changeSensitivity = useCallback((sensitivity: number) => {
+        setMaskStatus(status => status && { ...status, sensitivity });
+        writePeripheral(`sens: ${sensitivity}`);
+    }, [writePeripheral]);
 
     const onTimePicked = (event: DateTimePickerEvent, selectedDate?: Date) => {
         if (event.type === 'set' && selectedDate) {
@@ -551,22 +683,22 @@ const ConnectScreen = () => {
                                         <Text style={styles.scanButtonText}>Do a Trick</Text>
                                     </TouchableOpacity>
 
-                                    <Text style={styles.sectionTitle}>QTR Sensor Controls</Text>
-                                    <View style={styles.buttonRow}>
-                                        <TouchableOpacity
-                                            onPress={() => {
-                                                setQtrDataPoints([]);
-                                                isCollectingQTR.current = true;
-                                                writePeripheral('qtr: collect');
-                                            }}
-                                            style={[styles.controlButton, styles.buttonSmall]}>
-                                            <Text style={styles.scanButtonText}>QTR Collect</Text>
-                                        </TouchableOpacity>
-                                    </View>
+                                    <CueSettingsPanel
+                                        status={maskStatus}
+                                        onChangeCueLevel={changeCueLevel}
+                                        onChangeSensitivity={changeSensitivity}
+                                        onPreview={previewCue}
+                                    />
 
-                                    {qtrDataPoints.length > 0 && (
-                                        <QTRGraph points={qtrDataPoints} onClear={clearQtrData} />
-                                    )}
+                                    <SensorTestPanel
+                                        testing={testing}
+                                        samples={testSamples}
+                                        summary={testSummary}
+                                        eyeCount={testCounts.eye}
+                                        bodyCount={testCounts.body}
+                                        onStart={startTest}
+                                        onStop={stopTest}
+                                    />
 
                                     <Text style={styles.sectionTitle}>Time Window</Text>
                                     <View style={styles.timeContainer}>
@@ -599,6 +731,15 @@ const ConnectScreen = () => {
                                 </View>
                             </>
                         )}
+
+                        <View style={styles.controlsContainer}>
+                            <NightReportPanel
+                                report={nightReport}
+                                canDownload={connectedPeripherals.size > 0 && !!maskStatus?.hasLog}
+                                downloading={downloading}
+                                onDownload={downloadNightLog}
+                            />
+                        </View>
                     </ScrollView>
                 </ImageBackground>
             </SafeAreaView>
@@ -691,25 +832,6 @@ const styles = StyleSheet.create({
         padding: 15,
         borderRadius: 10,
         margin: 10,
-        alignItems: 'center',
-    },
-    graphContainer: {
-        marginTop: 20,
-        marginBottom: 20,
-        alignItems: 'center',
-        borderRadius: 10,
-        backgroundColor: 'rgba(110, 110, 160, 0.3)',
-        padding: 10,
-    },
-    chart: {
-        borderRadius: 16,
-        marginVertical: 10,
-    },
-    clearButton: {
-        backgroundColor: COLORS.primaryPurpleHex,
-        padding: 10,
-        borderRadius: 10,
-        marginTop: 10,
         alignItems: 'center',
     },
     statusContainer: {

@@ -52,7 +52,7 @@ jest.mock('react-native-chart-kit', () => {
     React.useEffect(() => {
       mounts.count++;
     }, []);
-    return React.createElement(View, { testID: 'line-chart', data: props.data });
+    return React.createElement(View, { ...props, testID: 'line-chart' });
   };
   return { LineChart, __mounts: mounts };
 });
