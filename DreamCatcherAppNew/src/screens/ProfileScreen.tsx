@@ -4,6 +4,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from '@react-native-vector-icons/fontawesome';
 import { COLORS } from '../theme/theme';
 
+const stats = [
+    { label: 'Dreams Logged', value: '24' },
+    { label: 'Streak (Days)', value: '7' },
+    { label: 'Lucid Dreams', value: '3' },
+];
+
 const ProfileScreen = ({ navigation }: { navigation: any }) => {
     const [isEditing, setIsEditing] = useState(false);
     const [profile, setProfile] = useState({
@@ -29,12 +35,6 @@ const ProfileScreen = ({ navigation }: { navigation: any }) => {
     const handleCancel = () => {
         setIsEditing(false);
     };
-
-    const stats = [
-        { label: 'Dreams Logged', value: '24' },
-        { label: 'Streak (Days)', value: '7' },
-        { label: 'Lucid Dreams', value: '3' },
-    ];
 
     return (
         <>
