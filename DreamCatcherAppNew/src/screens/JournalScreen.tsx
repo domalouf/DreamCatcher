@@ -13,16 +13,8 @@ import {
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import { COLORS } from '../theme/theme';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-
-interface DreamEntry {
-    id: string;
-    date: string;
-    title: string;
-    content: string;
-}
-
-const STORAGE_KEY = '@dream_entries_v1';
+import { useTabBarSpace } from '../theme/useTabBarSpace';
+import { DreamEntry, loadEntries, saveEntries } from '../storage/journal';
 
 // Memoized so typing in the New Entry modal doesn't re-render every card in the journal
 const EntryCard = React.memo(({ entry, onPress }: { entry: DreamEntry, onPress: (entry: DreamEntry) => void }) => (
@@ -50,26 +42,15 @@ const JournalScreen = () => {
     const [dreamTitle, setDreamTitle] = useState('');
     const [dreamContent, setDreamContent] = useState('');
     const [selectedEntry, setSelectedEntry] = useState<DreamEntry | null>(null);
+    const tabBarSpace = useTabBarSpace();
 
     useEffect(() => {
-        const loadEntries = async () => {
-            try {
-                const stored = await AsyncStorage.getItem(STORAGE_KEY);
-                if (stored) {
-                    setEntries(JSON.parse(stored));
-                }
-            } catch (error) {
-                console.warn('[Journal] Failed to load saved entries', error);
-            }
-        };
-        loadEntries();
+        loadEntries().then(setEntries);
     }, []);
 
     const persistEntries = (next: DreamEntry[]) => {
         setEntries(next);
-        AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next)).catch((error: any) =>
-            console.warn('[Journal] Failed to persist entries', error),
-        );
+        saveEntries(next);
     };
 
     const getTodayDate = () => {
@@ -90,8 +71,8 @@ const JournalScreen = () => {
         const newEntry: DreamEntry = {
             id: Date.now().toString(),
             date: getTodayDate(),
-            title: dreamTitle,
-            content: dreamContent,
+            title: dreamTitle.trim(),
+            content: dreamContent.trim(),
         };
 
         persistEntries([newEntry, ...entries]);
@@ -100,9 +81,18 @@ const JournalScreen = () => {
         setModalVisible(false);
     };
 
-    const handleDeleteEntry = (id: string) => {
-        persistEntries(entries.filter(entry => entry.id !== id));
-        setSelectedEntry(null);
+    const handleDeleteEntry = (entry: DreamEntry) => {
+        Alert.alert('Delete this dream?', `"${entry.title}" will be removed from your journal.`, [
+            { text: 'Cancel', style: 'cancel' },
+            {
+                text: 'Delete',
+                style: 'destructive',
+                onPress: () => {
+                    persistEntries(entries.filter(e => e.id !== entry.id));
+                    setSelectedEntry(null);
+                },
+            },
+        ]);
     };
 
     return (
@@ -123,7 +113,7 @@ const JournalScreen = () => {
                             'rgba(15, 35, 54, 0.3)',
                             'rgba(15, 35, 54, 0.6)',
                             'rgba(15, 35, 54, 0.85)',
-                            COLORS.tirtiaryBlueHex
+                            COLORS.tertiaryBlueHex
                         ]}
                         locations={[0, 0.3, 0.5, 0.7, 0.9, 1]}
                         start={{ x: 0.5, y: 0 }}
@@ -135,7 +125,7 @@ const JournalScreen = () => {
                 {/* Scrollable Content that covers the background */}
                 <ScrollView 
                     style={styles.scrollView}
-                    contentContainerStyle={styles.scrollContent}
+                    contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarSpace }]}
                     showsVerticalScrollIndicator={false}
                 >
                     <View style={styles.topSpacer} />
@@ -157,7 +147,7 @@ const JournalScreen = () => {
                                 'rgba(15, 35, 54, 0.97)',
                                 'rgba(15, 35, 54, 0.98)',
                                 'rgba(15, 35, 54, 0.99)',
-                                COLORS.tirtiaryBlueHex
+                                COLORS.tertiaryBlueHex
                             ]}
                             locations={[0, 0.2, 0.4, 0.6, 0.75, 0.8, 0.84, 0.88, 0.91, 0.93, 0.95, 0.97, 0.98, 0.99, 1]}
                             style={styles.contentGradient}
@@ -304,9 +294,7 @@ const JournalScreen = () => {
 
                                 <TouchableOpacity
                                     style={styles.deleteButton}
-                                    onPress={() => {
-                                        handleDeleteEntry(selectedEntry.id);
-                                    }}
+                                    onPress={() => handleDeleteEntry(selectedEntry)}
                                 >
                                     <Text style={styles.deleteButtonText}>
                                         Delete Entry
@@ -325,7 +313,7 @@ export default JournalScreen;
 const styles = StyleSheet.create({
     screenContainer: {
         flex: 1,
-        backgroundColor: COLORS.tirtiaryBlueHex,
+        backgroundColor: COLORS.tertiaryBlueHex,
     },
     fixedBackground: {
         position: 'absolute',
@@ -370,14 +358,14 @@ const styles = StyleSheet.create({
         paddingBottom: 30,
     },
     buttonSection: {
-        backgroundColor: COLORS.tirtiaryBlueHex,
+        backgroundColor: COLORS.tertiaryBlueHex,
         paddingTop: 0,
         marginTop: -10,
     },
     entriesContainer: {
         paddingHorizontal: 16,
         paddingBottom: 16,
-        backgroundColor: COLORS.tirtiaryBlueHex,
+        backgroundColor: COLORS.tertiaryBlueHex,
     },
     headerContainer: {
         position: 'relative',
@@ -398,7 +386,7 @@ const styles = StyleSheet.create({
         marginBottom: 20,
         borderRadius: 14,
         overflow: 'hidden',
-        shadowColor: COLORS.primaryPurpleHex,
+        shadowColor: COLORS.primaryCoralHex,
         shadowOffset: { width: 0, height: 6 },
         shadowOpacity: 0.35,
         shadowRadius: 10,
@@ -410,7 +398,7 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         paddingVertical: 16,
         gap: 8,
-        backgroundColor: COLORS.primaryPurpleHex,
+        backgroundColor: COLORS.primaryCoralHex,
         borderRadius: 14,
     },
     addButtonIcon: {
@@ -425,7 +413,7 @@ const styles = StyleSheet.create({
         letterSpacing: 0.3,
     },
     emptyStateWrapper: {
-        backgroundColor: COLORS.tirtiaryBlueHex,
+        backgroundColor: COLORS.tertiaryBlueHex,
         flex: 1,
     },
     emptyState: {
@@ -502,7 +490,7 @@ const styles = StyleSheet.create({
         justifyContent: 'flex-end',
     },
     modalContent: {
-        backgroundColor: COLORS.tirtiaryBlueHex,
+        backgroundColor: COLORS.tertiaryBlueHex,
         borderTopLeftRadius: 24,
         borderTopRightRadius: 24,
         paddingTop: 8,
@@ -541,7 +529,7 @@ const styles = StyleSheet.create({
         padding: 4,
     },
     detailModalContent: {
-        backgroundColor: COLORS.tirtiaryBlueHex,
+        backgroundColor: COLORS.tertiaryBlueHex,
         borderTopLeftRadius: 24,
         borderTopRightRadius: 24,
         paddingHorizontal: 16,
@@ -584,7 +572,7 @@ const styles = StyleSheet.create({
         fontWeight: '300',
     },
     label: {
-        color: COLORS.primaryPurpleHex,
+        color: COLORS.primaryCoralHex,
         fontSize: 13,
         fontWeight: '700',
         marginBottom: 10,
@@ -640,7 +628,7 @@ const styles = StyleSheet.create({
         flex: 1,
         borderRadius: 12,
         overflow: 'hidden',
-        shadowColor: COLORS.primaryPurpleHex,
+        shadowColor: COLORS.primaryCoralHex,
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.4,
         shadowRadius: 8,
@@ -649,7 +637,7 @@ const styles = StyleSheet.create({
     saveButton: {
         paddingVertical: 14,
         borderRadius: 12,
-        backgroundColor: COLORS.primaryPurpleHex,
+        backgroundColor: COLORS.primaryCoralHex,
     },
     buttonText: {
         color: COLORS.whiteHex,

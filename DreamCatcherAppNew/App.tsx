@@ -7,12 +7,11 @@ import Icon from '@react-native-vector-icons/fontawesome';
 import { BlurView } from '@react-native-community/blur';
 import { useSafeAreaInsets, SafeAreaProvider } from 'react-native-safe-area-context';
 import SystemNavigationBar from 'react-native-system-navigation-bar';
-import { COLORS } from './src/theme/theme';
+import { COLORS, TAB_BAR_HEIGHT } from './src/theme/theme';
 
 import JournalScreen from './src/screens/JournalScreen';
 import LearnScreen from './src/screens/LearnScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
-import SettingsScreen from './src/screens/SettingsScreen';
 import ConnectScreen from './src/screens/ConnectScreen';
 
 const Tab = createBottomTabNavigator();
@@ -30,7 +29,7 @@ const renderTabBarBackground = () => (
 
 function BottomNavBarTabs() {
   const insets = useSafeAreaInsets();
-  
+
   return (
     <Tab.Navigator
       initialRouteName="DC"
@@ -55,7 +54,7 @@ function BottomNavBarTabs() {
         component={JournalStack}
         options={{
           tabBarShowLabel: false,
-          tabBarLabel: 'Home',
+          tabBarLabel: 'Journal',
           tabBarIcon: tabIcon('book'),
         }}
       />
@@ -129,12 +128,6 @@ function ProfileStack() {
           animation: 'slide_from_bottom',
         }}
         component={ProfileScreen} />
-        <Stack.Screen name="Settings"
-        options={{
-          headerShown: true,
-          animation: 'slide_from_bottom',
-        }}
-        component={SettingsScreen} />
     </Stack.Navigator>
   );
 }
@@ -169,7 +162,7 @@ export default function App() {
 
 const styles = StyleSheet.create({
   tabBarStyle: {
-    height: 60,
+    height: TAB_BAR_HEIGHT,
     position: 'absolute',
     bottom: 0,
     left: 0,

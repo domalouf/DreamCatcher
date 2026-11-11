@@ -96,6 +96,8 @@ export class NightLogReader {
         epochs: [],
         cues: [],
     };
+    private expectedEpochs = 0;
+    private expectedCues = 0;
 
     static isLogMessage(line: string) {
         return /^(LOG:|LS:|LV:|E\d+:|C:|LOG_END$)/.test(line);
@@ -106,7 +108,11 @@ export class NightLogReader {
         if (line === 'LOG_END') {
             return this.report;
         }
-        if (line.startsWith('LS:')) {
+        if (line.startsWith('LOG:')) {
+            const [epochs, cues] = toInts(line.slice(4));
+            this.expectedEpochs = epochs || 0;
+            this.expectedCues = cues || 0;
+        } else if (line.startsWith('LS:')) {
             const [startUnix, epochSec] = toInts(line.slice(3));
             this.report.startUnix = startUnix || 0;
             this.report.epochSec = epochSec || 30;
@@ -134,6 +140,16 @@ export class NightLogReader {
             }
         }
         return null;
+    }
+
+    // False if part of the log went missing on the way from the mask
+    isComplete() {
+        const { epochs, cues } = this.report;
+        return (
+            cues.length === this.expectedCues &&
+            epochs.length === this.expectedEpochs &&
+            epochs.filter(Boolean).length === this.expectedEpochs
+        );
     }
 }
 

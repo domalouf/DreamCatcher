@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { View, StatusBar, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { COLORS } from '../theme/theme';
+import { useTabBarSpace } from '../theme/useTabBarSpace';
 
 const learningTopics = [
     {
@@ -37,6 +38,7 @@ const learningTopics = [
 ];
 
 const LearnScreen = () => {
+    const tabBarSpace = useTabBarSpace();
     const [expandedTopic, setExpandedTopic] = useState<number | null>(null);
 
     const toggleTopic = (id: number) => {
@@ -46,8 +48,8 @@ const LearnScreen = () => {
     return (
         <>
             <StatusBar barStyle="default" />
-            <SafeAreaView style={styles.screenContainer}>
-                <ScrollView contentContainerStyle={styles.contentContainer}>
+            <SafeAreaView style={styles.screenContainer} edges={['top', 'left', 'right']}>
+                <ScrollView contentContainerStyle={[styles.contentContainer, { paddingBottom: tabBarSpace }]}>
                     <Text style={styles.title}>Learn About Dreams</Text>
                     <Text style={styles.subtitle}>Explore fascinating facts about dreaming, lucid dreams, and more</Text>
                     
@@ -80,11 +82,10 @@ export default LearnScreen;
 const styles = StyleSheet.create({
     screenContainer: {
         flex: 1,
-        backgroundColor: COLORS.tirtiaryBlueHex,
+        backgroundColor: COLORS.tertiaryBlueHex,
     },
     contentContainer: {
         padding: 16,
-        paddingBottom: 32,
     },
     title: {
         fontSize: 32,

@@ -5,11 +5,8 @@ import {
     Text,
     StyleSheet,
     ImageBackground,
-    Linking,
-    Platform,
     ScrollView,
     TouchableOpacity,
-    PermissionsAndroid,
     TouchableHighlight,
     Alert,
 } from 'react-native';
@@ -36,6 +33,7 @@ import {
     parseTestSample,
     parseTestSummary,
 } from '../ble/maskProtocol';
+import { requestAndroidPermissions } from '../ble/permissions';
 import SensorTestPanel from '../components/SensorTestPanel';
 import CueSettingsPanel from '../components/CueSettingsPanel';
 import NightReportPanel from '../components/NightReportPanel';
@@ -45,7 +43,6 @@ const SECONDS_TO_SCAN_FOR = 3;
 const SERVICE_UUID = '7504e3b0-fd7a-4b56-b74d-c6e7eeed3f19';
 const CHARACTERISTIC_UUID = '8b38e5b5-2b9a-4954-9281-fcab195b0912';
 const SERVICE_UUIDS: string[] = [SERVICE_UUID];
-//const SERVICE_UUIDS: string[] = [];  // temporarily empty to scan all devices
 const ALLOW_DUPLICATES = false;
 
 const REPORTS_KEY = '@night_reports_v1';
@@ -92,79 +89,7 @@ function secondsBetween(from: Date, to: Date) {
     return Math.round((to.getTime() - from.getTime()) / 1000);
 }
 
-const requestAndroidPermissions = () => {
-    if (Platform.OS === 'android' && Platform.Version >= 31) {
-        PermissionsAndroid.requestMultiple([
-            PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
-            PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
-        ]).then(result => {
-            const scanGranted = result[PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN] === PermissionsAndroid.RESULTS.GRANTED;
-            const connectGranted = result[PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT] === PermissionsAndroid.RESULTS.GRANTED;
-            const scanNeverAsk = result[PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN] === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN;
-            const connectNeverAsk = result[PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT] === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN;
-
-            if (scanGranted && connectGranted) {
-                console.log(
-                    '[requestAndroidPermissions] User accepts runtime permissions android 12+',
-                );
-            } else if (scanNeverAsk || connectNeverAsk) {
-                console.error('[requestAndroidPermissions] Permissions set to never ask again');
-                Alert.alert(
-                    'Permissions Required',
-                    'Bluetooth permissions are required to use this app. You previously selected "Don\'t ask again". Please enable Bluetooth permissions in your device settings.',
-                    [
-                        {
-                            text: 'Cancel',
-                            style: 'cancel',
-                        },
-                        {
-                            text: 'Open Settings',
-                            onPress: () => Linking.openSettings(),
-                        },
-                    ],
-                );
-            } else {
-                console.error(
-                    '[requestAndroidPermissions] User refuses runtime permissions android 12+',
-                );
-                Alert.alert(
-                    'Permissions Required',
-                    'Bluetooth scan and connect permissions are required to find and connect to your Dream Catcher mask. Please grant these permissions to continue.',
-                    [
-                        {
-                            text: 'OK',
-                            onPress: requestAndroidPermissions,
-                        },
-                    ],
-                );
-            }
-        });
-    } else if (Platform.OS === 'android' && Platform.Version >= 23) {
-        PermissionsAndroid.check(
-            PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-        ).then(checkResult => {
-            if (checkResult) {
-                console.log(
-                    '[requestAndroidPermissions] runtime permission Android <12 already OK',
-                );
-            } else {
-                PermissionsAndroid.request(
-                    PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-                ).then(requestResult => {
-                    if (requestResult) {
-                        console.log(
-                            '[requestAndroidPermissions] User accepts runtime permission android <12',
-                        );
-                    } else {
-                        console.error(
-                            '[requestAndroidPermissions] User refuses runtime permission android <12',
-                        );
-                    }
-                });
-            }
-        });
-    }
-};
+const formatTime = (time: Date) => time.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 
 const ConnectScreen = () => {
     const [isScanning, setIsScanning] = useState(false);
@@ -202,39 +127,32 @@ const ConnectScreen = () => {
     // Debug/status messages
     const [statusMessages, setStatusMessages] = useState<string[]>([]);
 
+    const scanTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
     const startScan = () => {
-        console.log('[startScan] called.');
-        if (!isScanning) {
-            // reset found peripherals before scan
-            setDiscoveredPeripherals(new Map<Peripheral['id'], Peripheral>());
-
-            try {
-                console.log('[startScan] starting scan...');
-                setIsScanning(true);
-                BleManager.scan({
-                serviceUUIDs: SERVICE_UUIDS,
-                seconds: SECONDS_TO_SCAN_FOR,
-                allowDuplicates: ALLOW_DUPLICATES,
-                matchMode: BleScanMatchMode.Sticky,
-                scanMode: BleScanMode.LowLatency,
-                callbackType: BleScanCallbackType.AllMatches,
-                })
-                    .then(() => {
-                        console.log('[startScan] scan promise returned successfully.');
-                    })
-                    .catch((err: any) => {
-                        console.error('[startScan] ble scan returned in error', err);
-                    });
-
-                // Fallback timeout to ensure isScanning is reset
-                setTimeout(() => {
-                    setIsScanning(false);
-                    console.log('[startScan] scan timeout - resetting isScanning.');
-                }, (SECONDS_TO_SCAN_FOR + 1) * 1000);
-            } catch (error) {
-                console.error('[startScan] ble scan error thrown', error);
-            }
+        if (isScanning) {
+            return;
         }
+        // reset found peripherals before scan
+        setDiscoveredPeripherals(new Map<Peripheral['id'], Peripheral>());
+        setIsScanning(true);
+        BleManager.scan({
+            serviceUUIDs: SERVICE_UUIDS,
+            seconds: SECONDS_TO_SCAN_FOR,
+            allowDuplicates: ALLOW_DUPLICATES,
+            matchMode: BleScanMatchMode.Sticky,
+            scanMode: BleScanMode.LowLatency,
+            callbackType: BleScanCallbackType.AllMatches,
+        }).catch((err: any) => {
+            console.error('[startScan] ble scan returned in error', err);
+            setIsScanning(false);
+        });
+
+        // Fallback in case the stop-scan event never arrives
+        if (scanTimeout.current) {
+            clearTimeout(scanTimeout.current);
+        }
+        scanTimeout.current = setTimeout(() => setIsScanning(false), (SECONDS_TO_SCAN_FOR + 1) * 1000);
     };
 
     const removeConnectedPeripheral = (id: Peripheral['id']) => {
@@ -315,20 +233,24 @@ const ConnectScreen = () => {
         }
     };
 
+    // Resolves to whether the mask received the message
     const writePeripheral = useCallback(async (writeData: string) => {
         if (connectedPeripherals.size === 0) {
             console.warn('[writePeripheral] No connected peripherals found.');
-            return;
+            return false;
         }
 
+        let sent = true;
         for (const peripheral of connectedPeripherals.values()) {
             try {
                 await writeText(peripheral.id, writeData);
                 console.log(`[writePeripheral][${peripheral.id}] wrote '${writeData}'`);
             } catch (error) {
                 console.error(`[writePeripheral][${peripheral.id}] failed to write '${writeData}'`, error);
+                sent = false;
             }
         }
+        return sent;
     }, [connectedPeripherals]);
 
     // sends esp32 a set of strings that represent the time window
@@ -348,9 +270,17 @@ const ConnectScreen = () => {
         const start = nextOccurrence(startTimeWindow, now);
         const end = nextOccurrence(endTimeWindow, start);
 
-        await writePeripheral('now: ' + Math.round(now.getTime() / 1000));
-        await writePeripheral('startTime: ' + secondsBetween(now, start));
-        await writePeripheral('scanTime: ' + secondsBetween(start, end));
+        const sent =
+            (await writePeripheral('now: ' + Math.round(now.getTime() / 1000))) &&
+            (await writePeripheral('startTime: ' + secondsBetween(now, start))) &&
+            (await writePeripheral('scanTime: ' + secondsBetween(start, end)));
+        if (!sent) {
+            Alert.alert(
+                'Could Not Reach the Mask',
+                'The time window was not sent. Check the mask is still connected and try again.',
+            );
+            return;
+        }
 
         setIsMaskSleep(true);
     };
@@ -434,13 +364,19 @@ const ConnectScreen = () => {
                 logReader.current = new NightLogReader();
             }
             if (logReader.current && NightLogReader.isLogMessage(dataString)) {
-                const report = logReader.current.add(dataString);
+                const reader = logReader.current;
+                const report = reader.add(dataString);
                 if (report) {
                     logReader.current = null;
-                    setNightReport(report);
                     setDownloading(false);
-                    addStatusMessage('Night report downloaded');
-                    saveNightReport(report);
+                    if (reader.isComplete()) {
+                        setNightReport(report);
+                        addStatusMessage('Night report downloaded');
+                        saveNightReport(report);
+                    } else {
+                        // Don't show or keep a report with holes in it
+                        addStatusMessage('Night report arrived incomplete - tap Download Last Night to try again');
+                    }
                 }
                 return;
             }
@@ -462,16 +398,9 @@ const ConnectScreen = () => {
             }
         };
 
-        try {
-            BleManager.start({ showAlert: false })
-                .then(() => console.log('BleManager started.'))
-                .catch((error: any) =>
-                    console.error('BleManager could not be started.', error),
-                );
-        } catch (error) {
-            console.error('unexpected error starting BleManager.', error);
-            return;
-        }
+        BleManager.start({ showAlert: false })
+            .then(() => console.log('BleManager started.'))
+            .catch((error: any) => console.error('BleManager could not be started.', error));
 
         const listeners = [
             BleManager.onDiscoverPeripheral(handleDiscoverPeripheral),
@@ -486,6 +415,9 @@ const ConnectScreen = () => {
             console.log('[app] main component unmounting. Removing listeners...');
             for (const listener of listeners) {
                 listener.remove();
+            }
+            if (scanTimeout.current) {
+                clearTimeout(scanTimeout.current);
             }
         };
     }, []);
@@ -584,9 +516,6 @@ const ConnectScreen = () => {
 
     const renderItem = ({ item }: { item: Peripheral }) => {
         const backgroundColor = connectedPeripherals.has(item.id) ? '#069400' : '#6e6ea0'; // green if connected, light blue if not
-        // if (item.name === null || !item.name?.includes('ESP32')) {
-        //     //return null;
-        // }
 
         return (
             <TouchableHighlight
@@ -629,7 +558,7 @@ const ConnectScreen = () => {
                         </TouchableOpacity>
                     </View>
 
-                    <ScrollView 
+                    <ScrollView
                         style={styles.scrollContainer}
                         contentContainerStyle={styles.scrollContent}
                         showsVerticalScrollIndicator={true}>
@@ -654,8 +583,6 @@ const ConnectScreen = () => {
                                 )}
 
                                 <View style={styles.controlsContainer}>
-                                    <Text style={styles.sectionTitle}>LED Controls</Text>
-
                                     {statusMessages.length > 0 && (
                                         <View style={styles.statusContainer}>
                                             <Text style={styles.sectionTitle}>Connection Status</Text>
@@ -664,6 +591,8 @@ const ConnectScreen = () => {
                                             ))}
                                         </View>
                                     )}
+
+                                    <Text style={styles.sectionTitle}>LED Controls</Text>
 
                                     <View style={styles.buttonRow}>
                                         <TouchableOpacity
@@ -708,7 +637,7 @@ const ConnectScreen = () => {
                                             <Text style={styles.scanButtonText}>Set Start Time</Text>
                                         </TouchableOpacity>
                                         <Text style={styles.timeText}>
-                                            {startTimeWindow.toLocaleTimeString()}
+                                            {formatTime(startTimeWindow)}
                                         </Text>
                                     </View>
 
@@ -719,7 +648,7 @@ const ConnectScreen = () => {
                                             <Text style={styles.scanButtonText}>Set End Time</Text>
                                         </TouchableOpacity>
                                         <Text style={styles.timeText}>
-                                            {endTimeWindow.toLocaleTimeString()}
+                                            {formatTime(endTimeWindow)}
                                         </Text>
                                     </View>
 
@@ -752,7 +681,7 @@ export default ConnectScreen;
 const styles = StyleSheet.create({
     screenContainer: {
         flex: 1,
-        backgroundColor: COLORS.tirtiaryBlueHex,
+        backgroundColor: COLORS.tertiaryBlueHex,
     },
     title: {
         fontSize: 30,
@@ -802,7 +731,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 10,
     },
     controlButton: {
-        backgroundColor: COLORS.primaryPurpleHex,
+        backgroundColor: COLORS.primaryCoralHex,
         padding: 15,
         borderRadius: 10,
         margin: 10,
@@ -846,7 +775,7 @@ const styles = StyleSheet.create({
         marginVertical: 4,
         paddingLeft: 10,
         borderLeftWidth: 2,
-        borderLeftColor: COLORS.primaryPurpleHex,
+        borderLeftColor: COLORS.primaryCoralHex,
     },
     peripheralName: {
         fontSize: 16,
