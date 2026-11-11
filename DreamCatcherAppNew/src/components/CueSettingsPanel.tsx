@@ -75,7 +75,7 @@ const styles = StyleSheet.create({
         fontSize: 16,
     },
     stepperButton: {
-        backgroundColor: COLORS.primaryPurpleHex,
+        backgroundColor: COLORS.primaryCoralHex,
         borderRadius: 10,
         width: 40,
         height: 40,

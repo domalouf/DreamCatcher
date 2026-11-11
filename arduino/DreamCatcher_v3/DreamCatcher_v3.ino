@@ -311,7 +311,7 @@ void startWaitingForWindow() {
   rtcState = STATE_WAITING_FOR_WINDOW;
   saveSettings();
 
-  send("ACK: sleeping until the window");
+  send("ACK: window set");
   delay(1000);  // give time for the message to go out
   setLights(0);
   goToSleep((uint32_t)firstSleepTime);
@@ -362,7 +362,7 @@ void startTest() {
   testStartMs = millis();
   nextTestSampleMs = testStartMs;
   testBinsClosed = 0;
-  send("ACK: sensor test started");
+  send("ACK: test started");
 }
 
 void stopTest() {
@@ -379,6 +379,12 @@ void runTestStep() {
     return;
   }
   if ((int32_t)(now - nextTestSampleMs) < 0) return;
+  if (now - nextTestSampleMs > 5 * dc::SAMPLE_MS) {
+    // Fell behind (e.g. while previewing the cue): skip the missed readings
+    // rather than taking them all at once, which would look like movement
+    nextTestSampleMs = now;
+    testDetector.reset();
+  }
   nextTestSampleMs += dc::SAMPLE_MS;
 
   const uint16_t raw = readEyeSensor();
@@ -413,17 +419,17 @@ void checkInput(String value) {
   if (value == "light: on") {
     LED_PIN_on = true;
     setLights(LIGHT_MAX_DUTY);
-    ack("light turned on");
+    ack("light on");
   }
   else if (value == "light: off") {
     LED_PIN_on = false;
     setLights(0);
-    ack("light turned off");
+    ack("light off");
   }
   else if (value == "trick: yes") {
     trickRequested = true;
   }
-  else if (value == "test: start" || value == "qtr: collect") {
+  else if (value == "test: start") {
     testStartRequested = true;
   }
   else if (value == "test: stop") {
@@ -594,6 +600,8 @@ void loop() {
   }
   if (deviceConnected && !oldDeviceConnected) {
     oldDeviceConnected = true;
+    // The heartbeat stops while connected, so don't leave it stuck mid-blink
+    if (!LED_PIN_on) setLights(0);
   }
 
   if (!deviceConnected) {

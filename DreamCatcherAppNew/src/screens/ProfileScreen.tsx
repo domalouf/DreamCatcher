@@ -1,26 +1,64 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View, StatusBar, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Icon from '@react-native-vector-icons/fontawesome';
 import { COLORS } from '../theme/theme';
+import { useTabBarSpace } from '../theme/useTabBarSpace';
+import { DreamEntry, dreamStreak, loadEntries } from '../storage/journal';
 
-const stats = [
-    { label: 'Dreams Logged', value: '24' },
-    { label: 'Streak (Days)', value: '7' },
-    { label: 'Lucid Dreams', value: '3' },
+const PROFILE_KEY = '@profile_v1';
+
+const DEFAULT_PROFILE = {
+    name: 'Dream Explorer',
+    bio: 'Passionate about understanding my dreams and achieving lucid dreaming',
+    dreamGoal: 'Achieve lucid dreaming',
+};
+type Profile = typeof DEFAULT_PROFILE;
+
+const FIELDS: { key: keyof Profile, label: string, multiline?: boolean }[] = [
+    { key: 'name', label: 'Name' },
+    { key: 'bio', label: 'Bio', multiline: true },
+    { key: 'dreamGoal', label: 'Dream Goal' },
 ];
 
-const ProfileScreen = ({ navigation }: { navigation: any }) => {
+const ProfileScreen = () => {
+    const tabBarSpace = useTabBarSpace();
     const [isEditing, setIsEditing] = useState(false);
-    const [profile, setProfile] = useState({
-        name: 'Dream Explorer',
-        email: 'user@dreamcatcher.app',
-        bio: 'Passionate about understanding my dreams and achieving lucid dreaming',
-        dreamGoal: 'Achieve lucid dreaming',
-        joinDate: 'January 2025',
-    });
-
+    const [profile, setProfile] = useState(DEFAULT_PROFILE);
     const [tempProfile, setTempProfile] = useState(profile);
+    const [entries, setEntries] = useState<DreamEntry[]>([]);
+
+    useEffect(() => {
+        AsyncStorage.getItem(PROFILE_KEY)
+            .then(stored => {
+                if (stored) {
+                    setProfile({ ...DEFAULT_PROFILE, ...JSON.parse(stored) });
+                }
+            })
+            .catch(error => console.warn('[Profile] failed to load the profile', error));
+    }, []);
+
+    // The stats come from the journal, which may have changed since this tab was last open
+    useFocusEffect(
+        useCallback(() => {
+            let focused = true;
+            loadEntries().then(loaded => {
+                if (focused) {
+                    setEntries(loaded);
+                }
+            });
+            return () => {
+                focused = false;
+            };
+        }, []),
+    );
+
+    const stats = [
+        { label: 'Dreams Logged', value: entries.length },
+        { label: 'Streak (Days)', value: dreamStreak(entries) },
+    ];
 
     const handleEdit = () => {
         setTempProfile(profile);
@@ -30,6 +68,9 @@ const ProfileScreen = ({ navigation }: { navigation: any }) => {
     const handleSave = () => {
         setProfile(tempProfile);
         setIsEditing(false);
+        AsyncStorage.setItem(PROFILE_KEY, JSON.stringify(tempProfile)).catch(error =>
+            console.warn('[Profile] failed to save the profile', error),
+        );
     };
 
     const handleCancel = () => {
@@ -40,32 +81,21 @@ const ProfileScreen = ({ navigation }: { navigation: any }) => {
         <>
             <StatusBar barStyle="default" />
             <SafeAreaView style={styles.screenContainer} edges={['top', 'left', 'right']}>
-                <ScrollView contentContainerStyle={styles.contentContainer}>
+                <ScrollView contentContainerStyle={[styles.contentContainer, { paddingBottom: tabBarSpace }]}>
                     {/* Header with Edit Button */}
                     <View style={styles.headerContainer}>
                         <Text style={styles.title}>Profile</Text>
-                        <View style={styles.headerButtons}>
-                            <TouchableOpacity 
-                                onPress={() => navigation.navigate('Settings')}
-                                style={styles.settingsButton}
-                            >
-                                <Icon 
-                                    name="cog" 
-                                    size={20} 
-                                    color={COLORS.whiteHex} 
-                                />
-                            </TouchableOpacity>
-                            <TouchableOpacity 
-                                onPress={isEditing ? handleSave : handleEdit}
-                                style={styles.editButton}
-                            >
-                                <Icon 
-                                    name={isEditing ? 'check' : 'pencil'} 
-                                    size={20} 
-                                    color={COLORS.whiteHex} 
-                                />
-                            </TouchableOpacity>
-                        </View>
+                        <TouchableOpacity
+                            onPress={isEditing ? handleSave : handleEdit}
+                            style={styles.editButton}
+                            accessibilityLabel={isEditing ? 'Save profile' : 'Edit profile'}
+                        >
+                            <Icon
+                                name={isEditing ? 'check' : 'pencil'}
+                                size={20}
+                                color={COLORS.whiteHex}
+                            />
+                        </TouchableOpacity>
                     </View>
 
                     {/* Profile Avatar Section */}
@@ -77,76 +107,31 @@ const ProfileScreen = ({ navigation }: { navigation: any }) => {
 
                     {/* Profile Info Section */}
                     <View style={styles.infoCard}>
-                        <View style={styles.infoField}>
-                            <Text style={styles.label}>Name</Text>
-                            {isEditing ? (
-                                <TextInput
-                                    style={styles.input}
-                                    value={tempProfile.name}
-                                    onChangeText={(text) => setTempProfile({ ...tempProfile, name: text })}
-                                    placeholderTextColor={COLORS.primaryGrayHex}
-                                />
-                            ) : (
-                                <Text style={styles.value}>{profile.name}</Text>
-                            )}
-                        </View>
-
-                        <View style={styles.infoField}>
-                            <Text style={styles.label}>Email</Text>
-                            {isEditing ? (
-                                <TextInput
-                                    style={styles.input}
-                                    value={tempProfile.email}
-                                    onChangeText={(text) => setTempProfile({ ...tempProfile, email: text })}
-                                    placeholderTextColor={COLORS.primaryGrayHex}
-                                />
-                            ) : (
-                                <Text style={styles.value}>{profile.email}</Text>
-                            )}
-                        </View>
-
-                        <View style={styles.infoField}>
-                            <Text style={styles.label}>Bio</Text>
-                            {isEditing ? (
-                                <TextInput
-                                    style={[styles.input, styles.bioInput]}
-                                    value={tempProfile.bio}
-                                    onChangeText={(text) => setTempProfile({ ...tempProfile, bio: text })}
-                                    placeholderTextColor={COLORS.primaryGrayHex}
-                                    multiline
-                                    numberOfLines={3}
-                                />
-                            ) : (
-                                <Text style={styles.value}>{profile.bio}</Text>
-                            )}
-                        </View>
-
-                        <View style={styles.infoField}>
-                            <Text style={styles.label}>Dream Goal</Text>
-                            {isEditing ? (
-                                <TextInput
-                                    style={styles.input}
-                                    value={tempProfile.dreamGoal}
-                                    onChangeText={(text) => setTempProfile({ ...tempProfile, dreamGoal: text })}
-                                    placeholderTextColor={COLORS.primaryGrayHex}
-                                />
-                            ) : (
-                                <Text style={styles.value}>{profile.dreamGoal}</Text>
-                            )}
-                        </View>
-
-                        <View style={styles.infoField}>
-                            <Text style={styles.label}>Member Since</Text>
-                            <Text style={styles.value}>{profile.joinDate}</Text>
-                        </View>
+                        {FIELDS.map(({ key, label, multiline }) => (
+                            <View key={key} style={styles.infoField}>
+                                <Text style={styles.label}>{label}</Text>
+                                {isEditing ? (
+                                    <TextInput
+                                        style={[styles.input, multiline && styles.bioInput]}
+                                        value={tempProfile[key]}
+                                        onChangeText={text => setTempProfile({ ...tempProfile, [key]: text })}
+                                        placeholderTextColor={COLORS.primaryGrayHex}
+                                        multiline={multiline}
+                                        numberOfLines={multiline ? 3 : undefined}
+                                    />
+                                ) : (
+                                    <Text style={styles.value}>{profile[key]}</Text>
+                                )}
+                            </View>
+                        ))}
                     </View>
 
                     {/* Stats Section */}
                     <View style={styles.statsContainer}>
                         <Text style={styles.statsTitle}>Your Stats</Text>
                         <View style={styles.statsGrid}>
-                            {stats.map((stat, index) => (
-                                <View key={index} style={styles.statCard}>
+                            {stats.map(stat => (
+                                <View key={stat.label} style={styles.statCard}>
                                     <Text style={styles.statValue}>{stat.value}</Text>
                                     <Text style={styles.statLabel}>{stat.label}</Text>
                                 </View>
@@ -156,7 +141,7 @@ const ProfileScreen = ({ navigation }: { navigation: any }) => {
 
                     {/* Cancel Button (only show when editing) */}
                     {isEditing && (
-                        <TouchableOpacity 
+                        <TouchableOpacity
                             onPress={handleCancel}
                             style={styles.cancelButton}
                         >
@@ -174,11 +159,10 @@ export default ProfileScreen;
 const styles = StyleSheet.create({
     screenContainer: {
         flex: 1,
-        backgroundColor: COLORS.tirtiaryBlueHex,
+        backgroundColor: COLORS.tertiaryBlueHex,
     },
     contentContainer: {
         padding: 16,
-        paddingBottom: 32,
     },
     headerContainer: {
         flexDirection: 'row',
@@ -191,20 +175,6 @@ const styles = StyleSheet.create({
         color: COLORS.whiteHex,
         fontWeight: '800',
         letterSpacing: -0.5,
-    },
-    headerButtons: {
-        flexDirection: 'row',
-        gap: 10,
-    },
-    settingsButton: {
-        padding: 10,
-        backgroundColor: COLORS.primaryPurpleHex,
-        borderRadius: 12,
-        shadowColor: COLORS.primaryPurpleHex,
-        shadowOffset: { width: 0, height: 3 },
-        shadowOpacity: 0.25,
-        shadowRadius: 6,
-        elevation: 4,
     },
     editButton: {
         padding: 10,

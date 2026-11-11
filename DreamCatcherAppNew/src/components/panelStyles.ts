@@ -1,4 +1,4 @@
-import { StyleSheet } from 'react-native';
+import { StyleSheet, useWindowDimensions } from 'react-native';
 import { COLORS } from '../theme/theme';
 
 // Shared look for the mask panels on the connect screen
@@ -25,7 +25,7 @@ export const panelStyles = StyleSheet.create({
         marginVertical: 3,
     },
     button: {
-        backgroundColor: COLORS.primaryPurpleHex,
+        backgroundColor: COLORS.primaryCoralHex,
         padding: 15,
         borderRadius: 10,
         margin: 10,
@@ -52,11 +52,16 @@ export const panelStyles = StyleSheet.create({
 });
 
 export const CHART_CONFIG = {
-    backgroundColor: COLORS.tirtiaryBlueHex,
-    backgroundGradientFrom: COLORS.tirtiaryBlueHex,
-    backgroundGradientTo: COLORS.tirtiaryBlueHex,
+    backgroundColor: COLORS.tertiaryBlueHex,
+    backgroundGradientFrom: COLORS.tertiaryBlueHex,
+    backgroundGradientTo: COLORS.tertiaryBlueHex,
     color: () => COLORS.whiteHex,
     strokeWidth: 2,
     useShadowColorFromDataset: false,
     propsForDots: { r: '4' },
 };
+
+// As wide as a card's contents: the screen less the panel (10) and card (10) padding on each side
+export function useChartWidth() {
+    return useWindowDimensions().width - 40;
+}

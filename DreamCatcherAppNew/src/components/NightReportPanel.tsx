@@ -4,7 +4,7 @@ import { LineChart } from 'react-native-chart-kit';
 
 import { COLORS } from '../theme/theme';
 import { CueOutcome, NightReport, epochTime, summarizeNight } from '../ble/maskProtocol';
-import { panelStyles, CHART_CONFIG } from './panelStyles';
+import { panelStyles, CHART_CONFIG, useChartWidth } from './panelStyles';
 
 const BUCKET_EPOCHS = 10; // the chart shows 5 minute buckets
 
@@ -37,6 +37,7 @@ function formatEpoch(report: NightReport, epoch: number) {
 }
 
 const NightReportView = ({ report }: { report: NightReport }) => {
+    const chartWidth = useChartWidth();
     const summary = summarizeNight(report);
 
     // Eye movements per 5 minutes, with a dot where a cue was given
@@ -78,7 +79,7 @@ const NightReportView = ({ report }: { report: NightReport }) => {
             {buckets.length > 1 && (
                 <LineChart
                     data={{ labels, datasets: [{ data: buckets.map(b => b.eyeMoves), color: () => COLORS.primaryBlueHex }] }}
-                    width={330}
+                    width={chartWidth}
                     height={180}
                     withInnerLines={false}
                     withShadow={false}

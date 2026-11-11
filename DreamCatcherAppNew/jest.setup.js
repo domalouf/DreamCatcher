@@ -18,11 +18,6 @@ jest.mock('@react-native-vector-icons/fontawesome', () => {
   return { __esModule: true, default: Text };
 });
 
-jest.mock('react-native-vector-icons/Feather', () => {
-  const { Text } = require('react-native');
-  return Text;
-});
-
 jest.mock('@react-native-community/blur', () => {
   const { View } = require('react-native');
   return { BlurView: View };

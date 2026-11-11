@@ -4,7 +4,7 @@ import { LineChart } from 'react-native-chart-kit';
 
 import { COLORS } from '../theme/theme';
 import { SENSOR_MAX_VALID, SENSOR_MIN_VALID, TestSample, TestSummary } from '../ble/maskProtocol';
-import { panelStyles, CHART_CONFIG } from './panelStyles';
+import { panelStyles, CHART_CONFIG, useChartWidth } from './panelStyles';
 
 const EYE_COLOR = COLORS.primaryOrangeHex;
 const BODY_COLOR = '#FF3B30';
@@ -21,6 +21,7 @@ interface Props {
 
 // Live view of the eye sensor, for positioning it and checking what the mask detects
 const SensorTestPanel = ({ testing, samples, summary, eyeCount, bodyCount, onStart, onStop }: Props) => {
+    const chartWidth = useChartWidth();
     const latest = samples[samples.length - 1];
     const signalOk = !latest || (latest.value >= SENSOR_MIN_VALID && latest.value <= SENSOR_MAX_VALID);
 
@@ -43,7 +44,7 @@ const SensorTestPanel = ({ testing, samples, summary, eyeCount, bodyCount, onSta
                     <LineChart
                         // No x-axis labels: chart-kit draws one per point, which is slow when redrawing 5 times a second
                         data={{ labels: [], datasets: [{ data: samples.map(s => s.value), color: () => COLORS.primaryBlueHex }] }}
-                        width={330}
+                        width={chartWidth}
                         height={200}
                         withVerticalLabels={false}
                         withInnerLines={false}

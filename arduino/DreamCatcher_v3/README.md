@@ -7,8 +7,9 @@ recognise you're dreaming (lucid dreaming) without being woken up.
 
 1. **Reset the mask.** It blinks briefly every 2 s while it waits for the app.
 2. **In the app**, connect, then pick the dream window's start and end times and tap
-   *Submit Time Window*. The app also sends the cue brightness, detection sensitivity
-   and the current time. The mask deep sleeps until the window starts.
+   *Submit Time Window*. The app also sends the current time. Cue brightness and
+   detection sensitivity are stored on the mask and can be changed from the app at any
+   time before that. The mask deep sleeps until the window starts.
 3. **During the window** the mask reads the eye sensor 25 times a second (light
    sleeping in between) and flashes the cue when it sees REM. See
    [How REM is detected](#how-rem-is-detected).
@@ -101,7 +102,7 @@ Mask to app:
 
 | Message | Meaning |
 | --- | --- |
-| `ACK: <text>` | A command was carried out |
+| `ACK: <text>` | A command was carried out (`light on`, `light off`, `trick performed`, `cue previewed`, `test started`, `window set`) |
 | `S:<has log>,<cue %>,<sensitivity>` | Status |
 | `<ms>,<reading>,<movement>` | Sensor test reading. Movement is 0 none, 1 eye, 2 body. 25 per second. |
 | `B:<eye movements>,<REM-like>` | Sensor test summary every 10 s: eye movements in the last minute, and whether that looks like REM |

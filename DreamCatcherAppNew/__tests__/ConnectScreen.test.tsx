@@ -115,7 +115,7 @@ test('streams the sensor test into the graph, marking movements, without re-subs
   await act(async () => press(renderer.root, 'Start Sensor Test'));
   expect(writtenStrings()).toEqual(['test: start']);
 
-  await notify('ACK: sensor test started');
+  await notify('ACK: test started');
   await notify('0,2000,0');
   await notify('40,2010,0');
   await notify('80,2100,1');
@@ -169,13 +169,25 @@ test('downloads the night log when the mask has one and shows the report', async
   expect(saved[0].cues).toEqual([{ epoch: 2, level: 30, outcome: 'slept' }]);
 });
 
+test('does not show or save a night log that arrived with parts missing', async () => {
+  const renderer = await renderConnected();
+  await notify('S:1,30,3');
+  for (const line of NIGHT_LOG.filter(l => !l.startsWith('E4:'))) {
+    await notify(line);
+  }
+
+  expect(renderer.root.findAllByProps({ testID: 'night-report' })).toHaveLength(0);
+  expect(hasText(renderer.root, 'Download Last Night')).toBe(true);
+  expect(await AsyncStorage.getItem('@night_reports_v1')).toBeNull();
+});
+
 test('shows the last saved night report without connecting', async () => {
   const renderer = await renderConnected();
   await notify('S:1,30,3');
   for (const line of NIGHT_LOG) {
     await notify(line);
   }
-  renderer.unmount();
+  await act(async () => renderer.unmount());
 
   let reopened!: ReactTestRenderer.ReactTestRenderer;
   await act(async () => {
@@ -215,6 +227,24 @@ test.each([
     `startTime: ${startTime}`,
     `scanTime: ${scanTime}`,
   ]);
+});
+
+test('says so instead of showing the mask as asleep when the time window cannot be sent', async () => {
+  const alert = jest.spyOn(require('react-native').Alert, 'alert').mockImplementation(() => {});
+  jest.spyOn(console, 'error').mockImplementation(() => {});
+  const renderer = await renderConnected();
+  await act(async () => press(renderer.root, 'Set End Time'));
+  await act(async () =>
+    renderer.root
+      .findByProps({ testID: 'time-picker' })
+      .props.onChange({ type: 'set' }, new Date(Date.now() + 2 * 3600 * 1000)),
+  );
+  ble.write.mockRejectedValueOnce(new Error('disconnected'));
+
+  await act(async () => press(renderer.root, 'Submit Time Window'));
+
+  expect(alert).toHaveBeenCalledWith('Could Not Reach the Mask', expect.any(String));
+  expect(hasText(renderer.root, 'Mask is Awake')).toBe(true);
 });
 
 test('refuses a time window with the same start and end', async () => {

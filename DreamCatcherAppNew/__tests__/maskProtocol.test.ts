@@ -20,7 +20,7 @@ test('parses status, sensor test readings and summaries', () => {
 
   expect(parseTestSample('1240,2051,1')).toEqual({ t: 1240, value: 2051, movement: 1 });
   expect(parseTestSample('1240,2051,7')).toEqual({ t: 1240, value: 2051, movement: 0 });
-  expect(parseTestSample('ACK: sensor test started')).toBeNull();
+  expect(parseTestSample('ACK: test started')).toBeNull();
   expect(parseTestSample('1,2')).toBeNull();
 
   expect(parseTestSummary('B:12,1')).toEqual({ eyeMovesLastMinute: 12, remLike: true });
@@ -35,6 +35,7 @@ test('reads a night log', () => {
     expect(NightLogReader.isLogMessage(line)).toBe(true);
     expect(reader.add(line)).toBeNull();
   }
+  expect(reader.isComplete()).toBe(true);
   const report = reader.add('LOG_END');
 
   expect(report).toEqual({
@@ -56,7 +57,17 @@ test('reads a night log', () => {
     ],
   });
   expect(NightLogReader.isLogMessage('1240,2051,1')).toBe(false);
-  expect(NightLogReader.isLogMessage('ACK: light turned on')).toBe(false);
+  expect(NightLogReader.isLogMessage('ACK: light on')).toBe(false);
+});
+
+test('notices when part of a night log went missing', () => {
+  const missingEpochs = new NightLogReader();
+  ['LOG:8,0', 'LS:0,30', 'LV:3,30,30', 'E4:000000000000'].forEach(line => missingEpochs.add(line));
+  expect(missingEpochs.isComplete()).toBe(false);
+
+  const missingCue = new NightLogReader();
+  ['LOG:1,2', 'LS:0,30', 'LV:3,30,30', 'E0:000', 'C:0,30,1'].forEach(line => missingCue.add(line));
+  expect(missingCue.isComplete()).toBe(false);
 });
 
 const epoch = (rem: boolean, badSignal = false) => ({ eyeMoves: 0, body: false, rem, cue: false, badSignal });
