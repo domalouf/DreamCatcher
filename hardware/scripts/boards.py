@@ -155,11 +155,11 @@ main_parts = [
     Part("BT1", "LiPo 3.7V", "Device:Battery_Cell", "DreamCatcher:BatteryPads_P3.6mm",
          {"1": "VBAT", "2": "GND"}, (46.4, 15.2, 0), group="power", assemble=False),
     Part("Q1", "AO3401A", "Device:Q_PMOS_GSD", "Package_TO_SOT_SMD:SOT-23",
-         {"1": "VBUS", "2": "VSYS", "3": "VBAT"}, (33.2, 5.9, 0), "AO3401A", "C15127", "power"),
+         {"1": "VBUS", "2": "VSYS", "3": "VBAT"}, (32.7, 5.9, 0), "AO3401A", "C15127", "power"),
     # Discharges VBUS quickly when the cable is pulled, so Q1 switches to the battery at once
     R("R5", "10k", "GND", "VBUS", (33.4, 3.0, 0), "C25744", "power"),
     Part("D1", "B5819WS", "Device:D_Schottky", "Diode_SMD:D_SOD-323",
-         {"1": "VSYS", "2": "VBUS"}, (29.2, 5.0, 0), "B5819WS", "C64886", "power"),
+         {"1": "VSYS", "2": "VBUS"}, (29.0, 5.0, 0), "B5819WS", "C64886", "power"),
     Part("U3", "XC6220B331MR", "Regulator_Linear:XC6220B331MR", "Package_TO_SOT_SMD:SOT-23-5",
          {"1": "VSYS", "3": "VSYS", "2": "GND", "5": "+3V3"},
          (19.6, 2.2, 180), "XC6220B331MR-G", "C86534", "power"),
@@ -217,9 +217,13 @@ MAIN = Board(
             ("USB", 46.0, 6.0, 0.8, "B.SilkS")],
     power_nets=("VBUS", "VBAT", "VSYS", "+3V3", "VSENS"),
     first_nets=("USB_DP", "USB_DM", "CC1", "CC2", "I2C_SDA", "I2C_SCL", "ACC_INT1", "LED_STAT_A"),
-    # The status LED's ground pad sits in a pocket the ground pour can't reach
-    preroutes=ACCEL_ESCAPES + (("GND", 0.2, [(20.3, 7.8), (20.3, 9.0)]),),
-    pre_vias=(("GND", 20.3, 9.0),),
+    # Ground vias placed by hand: the status LED's ground pad sits in a pocket the
+    # ground pour can't reach, and the ground pins of the regulator and the USB
+    # protection chip should each have a via of their own
+    preroutes=ACCEL_ESCAPES + (("GND", 0.2, [(20.3, 7.8), (20.3, 9.0)]),
+                               ("GND", 0.2, [(20.75, 2.2), (21.85, 2.2)]),
+                               ("GND", 0.2, [(36.35, 6.0), (35.0, 6.0)])),
+    pre_vias=(("GND", 20.3, 9.0), ("GND", 21.85, 2.2), ("GND", 35.0, 6.0)),
     groups=MAIN_GROUPS,
 )
 

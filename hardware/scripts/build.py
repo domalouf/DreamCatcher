@@ -4,6 +4,8 @@
     python3 build.py main         one board
     python3 build.py --keep-pcb   don't re-route; redo the schematic, checks and outputs
 
+Building both boards also runs the tests in ../tests.
+
 Needs KiCad 7 or newer (kicad-cli and its Python module) and rsvg-convert for the
 preview images. Routing the main board takes several minutes.
 """
@@ -147,6 +149,12 @@ def main():
         previews(spec, out_dir)
         for leftover in glob.glob(os.path.join(out_dir, "*.kicad_prl")) + glob.glob(os.path.join(out_dir, "fp-info-cache")):
             os.remove(leftover)
+    # The tests look at every board, so they only make sense when all were built
+    if len(names) == len(BOARDS):
+        tests = subprocess.run([sys.executable, "-m", "unittest", "discover", "-s",
+                                os.path.join(HERE, "..", "tests")], capture_output=True, text=True)
+        print(tests.stderr.strip().splitlines()[-1] if tests.returncode == 0 else tests.stderr)
+        problems += tests.returncode != 0
     print("OK" if not problems else f"{problems} PROBLEMS")
     sys.exit(1 if problems else 0)
 

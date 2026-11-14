@@ -15,9 +15,9 @@ presses on the eye.
 
 ![Eye sensor board, front](dreamcatcher-eye-sensor/docs/front.png)
 
-**This design has not been built yet.** The connections and design rules are checked
-by script (see [What has been checked](#what-has-been-checked)), but no board has been
-manufactured or powered. Read [Before you order](#before-you-order) first.
+**This design has not been built yet.** It passes an automated test suite (see
+[What has been checked](#what-has-been-checked)), but no board has been manufactured or
+powered. Read [Before you order](#before-you-order) first.
 
 ## How it works
 
@@ -175,16 +175,38 @@ A 100-150 mAh cell should last several nights between charges.
 
 ## What has been checked
 
-`scripts/build.py` checks every run:
+`tests/` holds about 70 automated checks that read the finished KiCad files and the
+factory files. Run them from the `hardware` folder with KiCad's Python:
 
-- The schematic's netlist, exported by KiCad, matches the board's nets pin for pin.
-- KiCad's design rule check on each board: no clearance, width, hole or courtyard
-  errors and nothing left unconnected. The report is in each board folder as
-  `drc-report.txt`. The main board has five warnings, all for connector outlines on
-  the silkscreen running past the board edge, which the factory simply trims.
+```bash
+python3 -m unittest discover -s tests -v
+```
 
-Not checked: KiCad's electrical rules check on the schematic (KiCad 7's command line
-can't run it), anything about radio performance, and of course a real board.
+| File | What it asks |
+| --- | --- |
+| `test_circuit.py` | Is the circuit right? Every chip powered from the correct supply and grounded, the processor's start-up pins set so it boots, USB data on the pins the chip uses for USB, sensor signals on pins that can measure voltage, charge current safe for a small cell, LED currents within what a pin can drive, nothing left dangling. |
+| `test_eye_sensor.py` | Is the eye board wired correctly, and does each of its four wires land on the matching pin of the main board's sockets? |
+| `test_layout.py` | Is the board laid out sensibly? KiCad's own design rule check passes with nothing unconnected, no copper or parts under the antenna on any layer, USB and eye sockets open at the board edge, capacitors within 5 mm of the pins they serve, an unbroken ground plane, track and hole sizes JLCPCB can make. |
+| `test_fab.py` | Do the factory files match the design? Schematic and board agree pin for pin, every part appears once in the bill of materials with an order number, the placement list has every part at its real position, the Gerber archive has every layer. |
+| `test_router.py` | Does the script that draws the tracks obey its own rules (keeps its distance, goes round obstacles, reports failure rather than crossing another track)? |
+
+Writing these tests found three faults in the first version of the board, all now
+fixed: the ground plane ran under the antenna on an inner layer, the regulator's ground
+pin had no ground via nearby, and some vias sat within 0.05 mm of a solder pad.
+
+To see whether the tests would notice a mistake, I put twelve deliberate ones into a
+copy of the design (USB data lines swapped, a 1 A charge current, a sensor on a pin
+that can't measure, a backwards LED, eye-board wires swapped, a forgotten ground pin
+and so on). Every one made at least one test fail.
+
+What the tests cannot tell you:
+
+- Whether the facts they rely on are right. They encode pin functions and limits from
+  the datasheets as I understand them; a misreading would pass its own test.
+- Anything that needs a real board: radio range, noise on the eye sensor signal, battery
+  life, whether the footprints fit the actual parts.
+- KiCad's electrical rules check on the schematic, which KiCad 7's command line can't
+  run. Open the schematic in KiCad and run it once (Inspect > Electrical Rules Checker).
 
 ## Files
 
@@ -193,6 +215,7 @@ can't run it), anything about radio performance, and of course a real board.
 | `dreamcatcher-main/`, `dreamcatcher-eye-sensor/` | KiCad projects (open the `.kicad_pro`), `fab/` outputs and `docs/` previews with the schematic as PDF |
 | `lib/` | The project's own symbols and footprints |
 | `scripts/` | Generates everything above |
+| `tests/` | Checks on the generated design, see [What has been checked](#what-has-been-checked) |
 
 The KiCad files are generated: parts, nets and placement live in
 [`scripts/boards.py`](scripts/boards.py). You can edit the boards in KiCad directly, but

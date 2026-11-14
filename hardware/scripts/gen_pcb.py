@@ -104,10 +104,7 @@ def add_zone(board, rect, layer, net=None):
         outline.Append(mm(x + ORIGIN_X), mm(y + ORIGIN_Y))
     if net is None:
         zone.SetIsRuleArea(True)
-        layers = pcbnew.LSET()
-        layers.AddLayer(pcbnew.F_Cu)
-        layers.AddLayer(pcbnew.B_Cu)
-        zone.SetLayerSet(layers)
+        zone.SetLayerSet(pcbnew.LSET.AllCuMask(board.GetCopperLayerCount()))     # inner layers too
         zone.SetDoNotAllowCopperPour(True)
         zone.SetDoNotAllowTracks(True)
         zone.SetDoNotAllowVias(True)
@@ -187,7 +184,8 @@ def quiet_library_checks(project_path):
 
 def run_drc(board, report_path):
     pcbnew.WriteDRCReport(board, report_path, pcbnew.EDA_UNITS_MILLIMETRES, True)
-    text = open(report_path).read()
+    with open(report_path) as f:
+        text = f.read()
     sections = re.split(r"\n\*\* ", text)
     violations, unconnected = [], []
     for section in sections:

@@ -142,7 +142,7 @@ class Router:
         blocked = (self.own != 0) & (self.own != net)
         track_ok = np.stack([~self._dilate(blocked[layer], width / 2) for layer in self.layers])
         via_ok = ~self._dilate(blocked.any(axis=0), self.via_radius)
-        via_ok &= ~self._dilate(self.pads, self.via_radius + 0.1)
+        via_ok &= ~self._dilate(self.pads, self.via_radius + 0.2)     # solder must not reach the via
         via_ok &= ~self.no_via
         self._crowded = ((self.near_pad != 0) & (self.near_pad != net)).ravel().tolist()
         return track_ok, via_ok
