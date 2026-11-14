@@ -33,7 +33,7 @@ NOTES = {
         "Charge current = 1000 V / R3 = 100 mA. Use a cell of 100 mAh or more with its own protection circuit.",
         "Q1 and D1 share the load: on USB power the system runs from VBUS and the battery only charges.",
         "Q2 switches power to both eye sensors. SENS_EN_N low = sensors on.",
-        "Strapping pins: GPIO2 (status LED, pulled up), GPIO8 (SDA, pulled up), GPIO9 (BOOT pad, low at reset = USB download).",
+        "Strapping pins: GPIO2 (SENS_EN_N, pulled up by R13), GPIO8 (SDA, pulled up), GPIO9 (BOOT pad, low at reset = USB download).",
         "Accelerometer I2C address 0x19 (SA0 high).",
         "Eye connector pins: 1 cue LED anode, 2 GND, 3 phototransistor output, 4 IR LED anode.",
     ],

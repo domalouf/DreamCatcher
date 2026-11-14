@@ -147,10 +147,17 @@ class Router:
         self._crowded = ((self.near_pad != 0) & (self.near_pad != net)).ravel().tolist()
         return track_ok, via_ok
 
-    def cells_in_rect(self, cx, cy, w, h, angle):
+    def cells_in_rect(self, cx, cy, w, h, angle, round_pad=False):
+        """Grid cells well inside a pad, where a track may start or end. They stay a
+        little clear of the pad's edge so the track end always lands on copper, also
+        on pads with rounded corners."""
+        inset = min(0.1, min(w, h) / 2 - 0.05)
         reach = math.hypot(w, h) / 2 + self.pitch
         window, xs, ys = self._window(cx - reach, cy - reach, cx + reach, cy + reach)
-        inside = self._rect_distance(xs, ys, cx, cy, w / 2, h / 2, angle) <= 1e-9
+        if round_pad:
+            inside = np.hypot(xs - cx, ys - cy) <= min(w, h) / 2 - inset
+        else:
+            inside = self._rect_distance(xs, ys, cx, cy, w / 2 - inset, h / 2 - inset, angle) <= 1e-9
         iy, ix = np.nonzero(inside)
         return [(int(y) + window[0].start, int(x) + window[1].start) for y, x in zip(iy, ix)]
 

@@ -4,6 +4,7 @@ ground planes and checks the result with KiCad's design rule checker.
 Run with KiCad's Python:  python3 gen_pcb.py main|sensor [--place-only]
 """
 
+import json
 import math
 import os
 import re
@@ -166,8 +167,22 @@ def pad_geometry(pad):
 
 def pad_cells(router, pad, copper):
     x, y, w, h, angle = pad_geometry(pad)
-    cells = router.cells_in_rect(x, y, w, h, angle)
+    round_pad = pad.GetShape() in (pcbnew.PAD_SHAPE_CIRCLE, pcbnew.PAD_SHAPE_OVAL)
+    cells = router.cells_in_rect(x, y, w, h, angle, round_pad)
     return [(layer, iy, ix) for layer in pad_layers(pad, copper) for iy, ix in cells]
+
+
+def quiet_library_checks(project_path):
+    """The footprints differ from the library on purpose (hidden text), so the
+    project doesn't report that as a problem."""
+    with open(project_path) as f:
+        project = json.load(f)
+    severities = project["board"]["design_settings"].setdefault("rule_severities", {})
+    severities["lib_footprint_issues"] = "ignore"
+    severities["lib_footprint_mismatch"] = "ignore"
+    with open(project_path, "w") as f:
+        json.dump(project, f, indent=2)
+        f.write("\n")
 
 
 def run_drc(board, report_path):
@@ -288,9 +303,10 @@ def build(spec, place_only=False):
         return (max(xs) - min(xs)) + (max(ys) - min(ys))
 
     def route_all(order):
-        # Inner and back layers cost a little more, so short hops stay on the front
-        router = Router(spec.width, spec.height, layer_cost=[1.0] + [1.3] * (len(copper) - 1),
-                        clearance=ROUTE_CLEARANCE, via_diameter=VIA_DIAMETER)
+        # The front is where the pads are, and a long track there walls pads in. It is
+        # made expensive, so tracks drop to another layer for anything but a short hop.
+        router = Router(spec.width, spec.height, layer_cost=[2.5] + [1.0] * (len(copper) - 1),
+                        clearance=ROUTE_CLEARANCE, via_diameter=VIA_DIAMETER, via_cost=20.0)
         router.block_outside(inside_outline(spec, EDGE_CLEARANCE))
         for rect in spec.keepouts:
             router.block_rect(*rect)
@@ -318,6 +334,11 @@ def build(spec, place_only=False):
                     x, y = x1 + (x2 - x1) * i / steps, y1 + (y2 - y1) * i / steps
                     cells.add((0, round(y / router.pitch), round(x / router.pitch)))
             extra.setdefault(name, []).append(sorted(cells))
+        for name, x, y in spec.pre_vias:
+            router.vias.append((codes[name], x, y))
+            router.add_circle(router.layers, codes[name], x, y, router.via_radius)
+            router.no_via |= router._disc(round(x / router.pitch), round(y / router.pitch),
+                                          VIA_DIAMETER + 0.25)
         failed = []
         for name in order:
             widths = POWER_WIDTHS if name in spec.power_nets else (SIGNAL_WIDTH,)
@@ -406,11 +427,53 @@ def build(spec, place_only=False):
                     router.no_via |= router._disc(ix, iy, 2.0)
                     _, via_ok = router.passable(codes["GND"], SIGNAL_WIDTH)
         flush()
+
+        # A patch of pour that reaches ground pads but no via is still cut off from
+        # the rest. Give each such patch a via of its own.
+        gnd_pads = [pad for fp in board.GetFootprints() for pad in fp.Pads() if pad.GetNetname() == "GND"]
+        for attempt in range(4):
+            filler.Fill(board.Zones())
+            board.BuildConnectivity()
+            added = 0
+            for zone in zones:
+                fill = zone.GetFilledPolysList(zone.GetLayer())
+                for i in range(fill.OutlineCount()):
+                    if any(code == codes["GND"] and fill.Contains(point(x, y), i) for code, x, y in router.vias):
+                        continue
+                    box = fill.Outline(i).BBox()
+                    _, via_ok = router.passable(codes["GND"], SIGNAL_WIDTH)
+                    x1, y1 = pcbnew.ToMM(box.GetLeft()) - ORIGIN_X, pcbnew.ToMM(box.GetTop()) - ORIGIN_Y
+                    x2, y2 = pcbnew.ToMM(box.GetRight()) - ORIGIN_X, pcbnew.ToMM(box.GetBottom()) - ORIGIN_Y
+                    spots = [(ix * router.pitch, iy * router.pitch)
+                             for iy in range(max(int(y1 / router.pitch), 0), min(int(y2 / router.pitch) + 1, router.ny), 2)
+                             for ix in range(max(int(x1 / router.pitch), 0), min(int(x2 / router.pitch) + 1, router.nx), 2)
+                             if via_ok[iy, ix]]
+                    spot = next((s for s in spots if fill.Contains(point(*s), i)), None)
+                    if spot:
+                        router.vias.append((codes["GND"], *spot))
+                        router.add_circle(router.layers, codes["GND"], *spot, router.via_radius)
+                        added += 1
+                        continue
+                    # No room inside the patch: run a track from one of its pads to a via outside
+                    for pad in gnd_pads:
+                        x, y = pad_geometry(pad)[:2]
+                        inside = x1 - 0.3 <= x <= x2 + 0.3 and y1 - 0.3 <= y <= y2 + 0.3
+                        if inside and pad.IsOnLayer(zone.GetLayer()) and pad.GetAttribute() == pcbnew.PAD_ATTRIB_SMD:
+                            if router.fan_out(codes["GND"], pad_cells(router, pad, copper), SIGNAL_WIDTH):
+                                added += 1
+                                break
+                    else:
+                        print(f"  ground: no room to tie in the pour patch at ({x1:.1f}, {y1:.1f})")
+            flush()
+            if not added:
+                break
+            print(f"  ground: tied in {added} cut-off patches of pour", flush=True)
         filler.Fill(board.Zones())
         board.BuildConnectivity()
 
     violations, unconnected = run_drc(board, report_path)
     pcbnew.SaveBoard(pcb_path, board)
+    quiet_library_checks(pcb_path.replace(".kicad_pcb", ".kicad_pro"))
 
     print(f"{spec.name}: {len(router.tracks)} tracks, {len(router.vias)} vias")
     kinds = {"error": {}, "warning": {}}

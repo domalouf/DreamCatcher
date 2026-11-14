@@ -1,0 +1,16 @@
+** Drc report for  **
+** Created on 2026-11-14 03:58:52 **
+
+** Found 2 DRC violations **
+[lib_footprint_issues]: The current configuration does not include the library 'LED_SMD'.
+    Local override; Severity: warning
+    @(104.0000 mm, 85.5000 mm): Footprint D1
+[lib_footprint_issues]: The current configuration does not include the library 'OptoDevice'.
+    Local override; Severity: warning
+    @(104.0000 mm, 82.5000 mm): Footprint U1
+
+** Found 0 unconnected pads **
+
+** Found 0 Footprint errors **
+
+** End of Report **
