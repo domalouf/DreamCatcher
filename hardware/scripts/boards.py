@@ -156,7 +156,8 @@ main_parts = [
          {"1": "VBAT", "2": "GND"}, (46.4, 15.2, 0), group="power", assemble=False),
     Part("Q1", "AO3401A", "Device:Q_PMOS_GSD", "Package_TO_SOT_SMD:SOT-23",
          {"1": "VBUS", "2": "VSYS", "3": "VBAT"}, (33.2, 5.9, 0), "AO3401A", "C15127", "power"),
-    R("R5", "100k", "GND", "VBUS", (33.4, 3.0, 0), "C25741", "power"),
+    # Discharges VBUS quickly when the cable is pulled, so Q1 switches to the battery at once
+    R("R5", "10k", "GND", "VBUS", (33.4, 3.0, 0), "C25744", "power"),
     Part("D1", "B5819WS", "Device:D_Schottky", "Diode_SMD:D_SOD-323",
          {"1": "VSYS", "2": "VBUS"}, (29.2, 5.0, 0), "B5819WS", "C64886", "power"),
     Part("U3", "XC6220B331MR", "Regulator_Linear:XC6220B331MR", "Package_TO_SOT_SMD:SOT-23-5",

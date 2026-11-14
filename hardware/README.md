@@ -90,9 +90,12 @@ cables, but the signals are not I2C, so don't plug a Qwiic device in.
    of 100 mAh or more. For another charge current use R3 = 1000 / amps. Use a cell with
    its own protection circuit (most pouch cells with leads have one); the board has no
    under-voltage cut-off of its own. The leads solder to the two pads marked + and −.
+   There is no reverse-polarity protection, so check the lead colours against the
+   markings before soldering.
 2. **Look the boards over in KiCad.** The tracks were placed by a script, not by hand.
    They pass the design rule check, but they are not pretty, and a second pair of eyes
-   on a first board is always worth it.
+   on a first board is always worth it. The main board also has spare room: someone
+   laying it out by hand could bring it down to roughly 45 x 18 mm.
 3. **Check the parts in JLCPCB's parts list.** Stock changes daily. Things I noticed:
    - QRE1113GR (C232862) had low stock and one listing calls it not recommended for new
      designs. If it's unavailable, leave it off the order and solder sensors from
@@ -134,9 +137,12 @@ panelised by JLCPCB if their minimum size for assembly requires it.
   copper. Keep the battery, wires and anything metal away from that end.
 - **Sensor distance.** The QRE1113 works best 3-6 mm from the eyelid, as before.
 - **Cue LED.** Each eye board has one. The firmware can drive either or both.
-- **Buttons and pads.** RESET is a button. BOOT is a pair of pads next to it: bridge
+- **Buttons and pads.** RESET is a button. BOOT and GND are two pads next to it: bridge
   them with tweezers while pressing RESET to force the USB bootloader. This is only
-  needed if the firmware crashes too early for a normal USB upload.
+  needed if the firmware crashes too early for a normal USB upload. The pads (3V3, TX,
+  RX, BOOT, GND, BAT+, BAT-) are named on the back of the board.
+- **Mounting.** The boards have no mounting holes; the case should hold them by the
+  edges.
 
 ## Firmware changes
 
@@ -174,7 +180,8 @@ A 100-150 mAh cell should last several nights between charges.
 - The schematic's netlist, exported by KiCad, matches the board's nets pin for pin.
 - KiCad's design rule check on each board: no clearance, width, hole or courtyard
   errors and nothing left unconnected. The report is in each board folder as
-  `drc-report.txt`.
+  `drc-report.txt`. The main board has five warnings, all for connector outlines on
+  the silkscreen running past the board edge, which the factory simply trims.
 
 Not checked: KiCad's electrical rules check on the schematic (KiCad 7's command line
 can't run it), anything about radio performance, and of course a real board.

@@ -89,7 +89,7 @@ def fabrication_files(spec, out_dir):
         if part.assemble:
             groups.setdefault((part.value, part.footprint.split(":")[1], part.mpn, part.lcsc), []).append(part.ref)
     with open(os.path.join(fab, spec.name + "-bom.csv"), "w", newline="") as f:
-        writer = csv.writer(f)
+        writer = csv.writer(f, lineterminator="\n")
         writer.writerow(["Comment", "Designator", "Footprint", "MPN", "LCSC Part #"])
         for (value, footprint, mpn, lcsc), refs in sorted(groups.items(), key=lambda g: g[1][0]):
             writer.writerow([value, ",".join(refs), footprint, mpn, lcsc])
@@ -101,7 +101,7 @@ def fabrication_files(spec, out_dir):
     os.remove(positions)
     placed = {part.ref for part in spec.parts if part.assemble}
     with open(os.path.join(fab, spec.name + "-cpl.csv"), "w", newline="") as f:
-        writer = csv.writer(f)
+        writer = csv.writer(f, lineterminator="\n")
         writer.writerow(["Designator", "Mid X", "Mid Y", "Layer", "Rotation"])
         for row in rows:
             if row["Ref"] in placed:
