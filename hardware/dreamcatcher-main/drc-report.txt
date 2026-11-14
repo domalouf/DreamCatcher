@@ -1,0 +1,30 @@
+** Drc report for  **
+** Created on 2026-11-14 04:47:20 **
+
+** Found 5 DRC violations **
+[silk_edge_clearance]: Silkscreen clipped by board edge
+    Rule: board setup constraints silk; Severity: warning
+    @(150.0000 mm, 81.5000 mm): Line on Edge.Cuts
+    @(148.8500 mm, 90.7000 mm): Line on F.Silkscreen
+[silk_edge_clearance]: Silkscreen clipped by board edge
+    Rule: board setup constraints silk; Severity: warning
+    @(148.5000 mm, 81.5000 mm): Arc on Edge.Cuts
+    @(148.8500 mm, 81.3000 mm): Line on F.Silkscreen
+[silk_edge_clearance]: Silkscreen clipped by board edge
+    Rule: board setup constraints silk; Severity: warning
+    @(100.0000 mm, 96.5000 mm): Line on Edge.Cuts
+    @(100.0000 mm, 94.9250 mm): Line on F.Silkscreen
+[silk_edge_clearance]: Silkscreen clipped by board edge
+    Rule: board setup constraints silk; Severity: warning
+    @(100.0000 mm, 96.5000 mm): Line on Edge.Cuts
+    @(100.0000 mm, 82.9500 mm): Line on F.Silkscreen
+[silk_edge_clearance]: Silkscreen clipped by board edge
+    Rule: board setup constraints silk; Severity: warning
+    @(100.0000 mm, 96.5000 mm): Line on Edge.Cuts
+    @(100.0000 mm, 82.2000 mm): Line on F.Silkscreen
+
+** Found 0 unconnected pads **
+
+** Found 0 Footprint errors **
+
+** End of Report **

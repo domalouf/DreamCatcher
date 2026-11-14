@@ -1,0 +1,3 @@
+(sym_lib_table
+  (lib (name "DreamCatcher")(type "KiCad")(uri "${KIPRJMOD}/../lib/DreamCatcher.kicad_sym")(options "")(descr "DreamCatcher project parts"))
+)
